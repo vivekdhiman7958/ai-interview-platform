@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.next/
+
+# Environment files — NEVER push these
+.env
+.env.local
+.env.production
+
+# Database — contains real user data
+*.db
+*.db-shm
+*.db-wal
+
+# Video uploads
+Backend/uploads/
+
+# Build outputs
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Bun
+bun.lockb
