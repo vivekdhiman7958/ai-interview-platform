@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
-import api from "../../services/api";
+import api, { getErrorMessage, safeJsonParse } from "../../services/api";
 
 type Session = {
   id: string;
@@ -18,11 +18,15 @@ export default function CandidateDashboard() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     api.get("/api/candidate/sessions")
-      .then((res) => setSessions(res.data.sessions))
-      .catch(console.error)
+      .then((res) => setSessions(res.data.sessions ?? []))
+      .catch((err) => {
+        console.error("Failed to load candidate sessions", err);
+        setError(getErrorMessage(err, "Failed to load your interviews"));
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -33,12 +37,8 @@ export default function CandidateDashboard() {
   }
 
   function getScore(report: string | null): number | null {
-    if (!report) return null;
-    try {
-      return JSON.parse(report).overallScore ?? null;
-    } catch {
-      return null;
-    }
+    const parsed = safeJsonParse<{ overallScore?: number }>(report, "session report");
+    return parsed?.overallScore ?? null;
   }
 
   function scoreColor(score: number) {
@@ -87,6 +87,17 @@ export default function CandidateDashboard() {
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-6 h-6 border-2 border-[#0052FF] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+            <p className="text-sm text-red-600 mb-4">{error}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="text-sm font-semibold text-white bg-[#0052FF] px-4 py-2 rounded-lg"
+            >
+              Try again
+            </button>
           </div>
         ) : sessions.length === 0 ? (
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-16 text-center">

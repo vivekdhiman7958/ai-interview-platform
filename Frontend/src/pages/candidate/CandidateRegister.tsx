@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
-import api from "../../services/api";
+import api, { getErrorMessage } from "../../services/api";
 
 export default function CandidateRegister() {
   const navigate = useNavigate();
@@ -35,10 +35,8 @@ export default function CandidateRegister() {
       });
       navigate("/candidate/dashboard");
     } catch (err: unknown) {
-      setError(
-        (err as { response?: { data?: { error?: string } } })
-          ?.response?.data?.error ?? "Registration failed"
-      );
+      console.error("candidate registration failed", err);
+      setError(getErrorMessage(err, "Registration failed"));
     } finally {
       setLoading(false);
     }

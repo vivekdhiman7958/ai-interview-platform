@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../../services/api";
+import api, { getErrorMessage } from "../../services/api";
 
 export default function CreateRole() {
   const navigate = useNavigate();
@@ -43,10 +43,8 @@ export default function CreateRole() {
       await api.post("/api/roles", form);
       navigate("/company/dashboard");
     } catch (err: unknown) {
-      setError(
-        (err as { response?: { data?: { error?: string } } })
-          ?.response?.data?.error ?? "Failed to create role"
-      );
+      console.error("role creation failed", err);
+      setError(getErrorMessage(err, "Failed to create role"));
     } finally {
       setLoading(false);
     }

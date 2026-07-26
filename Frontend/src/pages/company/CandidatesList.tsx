@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import api from "../../services/api";
+import api, { getErrorMessage, safeJsonParse } from "../../services/api";
 
 type Session = {
   id: string;
@@ -17,14 +17,18 @@ export default function CandidatesList() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   //const [roleName, setRoleName] = useState("");
 
   useEffect(() => {
     api.get(`/api/roles/${roleId}/sessions`)
       .then((res) => {
-        setSessions(res.data.sessions);
+        setSessions(res.data.sessions ?? []);
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Failed to load sessions for role", roleId, err);
+        setError(getErrorMessage(err, "Failed to load candidates for this role"));
+      })
       .finally(() => setLoading(false));
   }, [roleId]);
 
@@ -37,13 +41,8 @@ export default function CandidatesList() {
   }
 
   function getScore(report: string | null): number | null {
-    if (!report) return null;
-    try {
-      const parsed = JSON.parse(report);
-      return parsed.overallScore ?? null;
-    } catch {
-      return null;
-    }
+    const parsed = safeJsonParse<{ overallScore?: number }>(report, "session report");
+    return parsed?.overallScore ?? null;
   }
 
   function scoreColor(score: number) {
@@ -91,6 +90,17 @@ export default function CandidatesList() {
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-6 h-6 border-2 border-[#0052FF] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+            <p className="text-sm text-red-600 mb-4">{error}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="text-sm font-semibold text-white bg-[#0052FF] px-4 py-2 rounded-lg"
+            >
+              Try again
+            </button>
           </div>
         ) : sessions.length === 0 ? (
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-16 text-center">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
-import api from "../../services/api";
+import api, { getErrorMessage } from "../../services/api";
 
 type RoleInfo = {
   title: string;
@@ -43,12 +43,18 @@ export default function InviteLanding() {
             if (alreadyDone) {
               setAlreadyCompleted(alreadyDone.id);
             }
-          } catch {
-            // silently ignore
+          } catch (err) {
+            // Not fatal: the interview socket re-checks for a completed session.
+            console.error("Could not check for a completed session", err);
           }
         }
       })
-      .catch(() => setError("This invite link is invalid or has expired."))
+      .catch((err) => {
+        console.error("Failed to load invite", token, err);
+        setError(
+          getErrorMessage(err, "This invite link is invalid or has expired.")
+        );
+      })
       .finally(() => setLoading(false));
   }, [token, user]);
 

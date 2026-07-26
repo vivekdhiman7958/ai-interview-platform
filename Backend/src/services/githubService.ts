@@ -26,23 +26,56 @@ export type GithubProfileSummary ={
     }[];
 };
 
-export async function fetchGithubProfile(username:string):Promise<GithubProfileSummary>{
-    const userResponse = await fetch(`${GITHUB_API_BASE}/users/${username}`);
-    if(!userResponse.ok){
-        throw new Error(`GitHub user fetch failed with status ${userResponse.status}`);
-    } 
-
-    const user = (await userResponse.json()) as GithubUser;
-    const reposResponse = await fetch(
-        `${GITHUB_API_BASE}/users/${username}/repos?sort=updated&per_page=10`
-    );
-
-    if(!reposResponse.ok){ 
-        throw new Error(`GitHub repos fetch failed with status ${reposResponse.status}`);
+async function getJson<T>(url: string, what: string): Promise<T> {
+    let response: Response;
+    try {
+        response = await fetch(url, {
+            headers: { Accept: "application/vnd.github+json" },
+        });
+    } catch (error) {
+        throw new Error(
+            `Could not reach GitHub while fetching ${what}: ${error instanceof Error ? error.message : String(error)}`
+        );
     }
 
-    const repos = (await reposResponse.json()) as GithubRepo[];
+    if (response.status === 404) {
+        throw new Error(`GitHub ${what} not found`);
+    }
+    if (response.status === 403 || response.status === 429) {
+        throw new Error(`GitHub rate limit hit while fetching ${what}`);
+    }
+    if (!response.ok) {
+        throw new Error(`GitHub ${what} fetch failed with status ${response.status}`);
+    }
+
+    try {
+        return (await response.json()) as T;
+    } catch (error) {
+        throw new Error(
+            `GitHub ${what} response was not valid JSON: ${error instanceof Error ? error.message : String(error)}`
+        );
+    }
+}
+
+export async function fetchGithubProfile(username:string):Promise<GithubProfileSummary>{
+    if (!username.trim()) {
+        throw new Error("GitHub username is required");
+    }
+
+    const user = await getJson<GithubUser>(
+        `${GITHUB_API_BASE}/users/${encodeURIComponent(username)}`,
+        "user"
+    );
+
+    const repos = await getJson<GithubRepo[]>(
+        `${GITHUB_API_BASE}/users/${encodeURIComponent(username)}/repos?sort=updated&per_page=10`,
+        "repositories"
+    );
     
+    if (!Array.isArray(repos)) {
+        throw new Error("GitHub repositories response had an unexpected shape");
+    }
+
     const topRepos = repos
     .filter((repo) => !repo.fork)
     .slice(0, 5)

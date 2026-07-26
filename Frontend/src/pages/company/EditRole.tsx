@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import api from "../../services/api";
+import api, { getErrorMessage, safeJsonParse } from "../../services/api";
 
 export default function EditRole() {
   const { roleId } = useParams();
@@ -29,10 +29,14 @@ export default function EditRole() {
           tech_stack: r.tech_stack,
           difficulty: r.difficulty,
           num_questions: r.num_questions,
-          custom_questions: JSON.parse(r.custom_questions || "[]"),
+          custom_questions:
+            safeJsonParse<string[]>(r.custom_questions, "custom questions") ?? [],
         });
       })
-      .catch(() => setError("Failed to load role"))
+      .catch((err) => {
+        console.error("Failed to load role", roleId, err);
+        setError(getErrorMessage(err, "Failed to load role"));
+      })
       .finally(() => setFetching(false));
   }, [roleId]);
 
@@ -57,10 +61,8 @@ export default function EditRole() {
       await api.put(`/api/roles/${roleId}`, form);
       navigate("/company/dashboard");
     } catch (err: unknown) {
-      setError(
-        (err as { response?: { data?: { error?: string } } })
-          ?.response?.data?.error ?? "Failed to update role"
-      );
+      console.error("Failed to update role", roleId, err);
+      setError(getErrorMessage(err, "Failed to update role"));
     } finally {
       setLoading(false);
     }

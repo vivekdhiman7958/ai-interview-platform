@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import api from "../../services/api";
+import api, { getErrorMessage, safeJsonParse } from "../../services/api";
 
 type Message = {
   id: number;
@@ -40,17 +40,26 @@ export default function CandidateSessionView() {
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"report" | "transcript">("report");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     api.get(`/api/candidate/sessions/${sessionId}`)
       .then((res) => {
         setSession(res.data.session);
-        setMessages(res.data.messages);
-        if (res.data.session.report) {
-          setReport(JSON.parse(res.data.session.report));
+        setMessages(res.data.messages ?? []);
+        const parsedReport = safeJsonParse<Report>(
+          res.data.session?.report ?? null,
+          "session report"
+        );
+        setReport(parsedReport);
+        if (res.data.session?.report && !parsedReport) {
+          setError("Your report is corrupted and could not be displayed.");
         }
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Failed to load session", sessionId, err);
+        setError(getErrorMessage(err, "Failed to load this interview session"));
+      })
       .finally(() => setLoading(false));
   }, [sessionId]);
 
@@ -76,8 +85,8 @@ export default function CandidateSessionView() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
-        <p className="text-[#64748B]">Session not found</p>
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center px-6 text-center">
+        <p className="text-[#64748B]">{error || "Session not found"}</p>
       </div>
     );
   }
@@ -224,7 +233,7 @@ export default function CandidateSessionView() {
 
         {tab === "report" && !report && (
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-16 text-center">
-            <p className="text-[#64748B] text-sm">No report generated yet.</p>
+            <p className="text-[#64748B] text-sm">{error || "No report generated yet."}</p>
           </div>
         )}
 

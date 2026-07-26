@@ -1,7 +1,7 @@
 // import { useState } from "react";
 // import { useNavigate, Link } from "react-router-dom";
 // import { useAuth } from "../../context/authContext";
-// import api from "../../services/api";
+// import api, { getErrorMessage } from "../../services/api";
 
 // export default function CompanyRegister() {
 //   const navigate = useNavigate();
@@ -149,7 +149,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
-import api from "../../services/api";
+import api, { getErrorMessage } from "../../services/api";
 
 export default function CompanyRegister() {
   const navigate = useNavigate();
@@ -176,9 +176,8 @@ export default function CompanyRegister() {
       });
       navigate("/company/dashboard");
     } catch (err: unknown) {
-      setError(
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? "Registration failed"
-      );
+      console.error("company registration failed", err);
+      setError(getErrorMessage(err, "Registration failed"));
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
-import api from "../../services/api";
+import api, { getErrorMessage } from "../../services/api";
 
 type Role = {
   id: string;
@@ -19,31 +19,48 @@ export default function CompanyDashboard() {
   const [loading, setLoading] = useState(true);
   const [inviteLink, setInviteLink] = useState("");
   const [inviteRole, setInviteRole] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     api.get("/api/roles")
-      .then((res) => setRoles(res.data.roles))
-      .catch(console.error)
+      .then((res) => setRoles(res.data.roles ?? []))
+      .catch((err) => {
+        console.error("Failed to load roles", err);
+        setError(getErrorMessage(err, "Failed to load your roles"));
+      })
       .finally(() => setLoading(false));
   }, []);
 
   async function generateInvite(roleId: string) {
+    setError("");
     try {
       const res = await api.post(`/api/roles/${roleId}/invite`);
       setInviteLink(res.data.inviteLink);
       setInviteRole(roleId);
-    } catch {
-      alert("Failed to generate invite link");
+    } catch (err: unknown) {
+      console.error("Failed to generate invite link", err);
+      setError(getErrorMessage(err, "Failed to generate invite link"));
     }
   }
 
   async function handleDelete(roleId: string) {
     if (!confirm("Are you sure you want to delete this role? This will also delete all invite links for this role.")) return;
+    setError("");
     try {
       await api.delete(`/api/roles/${roleId}`);
       setRoles((prev) => prev.filter((r) => r.id !== roleId));
-    } catch {
-      alert("Failed to delete role");
+    } catch (err: unknown) {
+      console.error("Failed to delete role", roleId, err);
+      setError(getErrorMessage(err, "Failed to delete role"));
+    }
+  }
+
+  async function copyInviteLink() {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+    } catch (err: unknown) {
+      console.error("Clipboard write failed", err);
+      setError("Could not copy the link — please copy it manually.");
     }
   }
 
@@ -106,6 +123,19 @@ export default function CompanyDashboard() {
           </button>
         </div>
 
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-center justify-between gap-4">
+            <p className="text-sm text-red-600">{error}</p>
+            <button
+              type="button"
+              onClick={() => setError("")}
+              className="text-xs text-red-500 px-3 py-1.5 rounded-lg border border-red-200 shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Invite link popup */}
         {inviteLink && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center justify-between gap-4">
@@ -115,7 +145,7 @@ export default function CompanyDashboard() {
             </div>
             <div className="flex gap-2 shrink-0">
               <button
-                onClick={() => { navigator.clipboard.writeText(inviteLink); alert("Copied!"); }}
+                onClick={copyInviteLink}
                 className="text-xs bg-[#0052FF] text-white px-3 py-1.5 rounded-lg font-medium"
               >
                 Copy

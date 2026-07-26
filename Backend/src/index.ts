@@ -8,6 +8,7 @@ import {
 } from "./routes/interviewSocket";
 import { handleCompanyRoutes } from "./routes/companyRoutes";
 import { handleCandidateRoutes } from "./routes/candidateRoutes";
+import { errorMessage } from "./utils/http";
 
 initDB();
 
@@ -63,26 +64,42 @@ const server = Bun.serve<SocketData>({
       });
 
       if (upgraded) return undefined;
+
+      return new Response(
+        JSON.stringify({ error: "WebSocket upgrade failed" }),
+        { status: 400, headers: corsHeaders }
+      );
     }
 
     // ── HTTP routes 
     let response: Response;
 
-    if (
-      url.pathname.startsWith("/api/company") ||
-      url.pathname.startsWith("/api/roles") ||
-      url.pathname.startsWith("/api/sessions")
-    ) {
-      response = await handleCompanyRoutes(req);
-    } else if (
-      url.pathname.startsWith("/api/candidate") ||
-      url.pathname.startsWith("/api/invite")
-    ) {
-      response = await handleCandidateRoutes(req);
-    } else {
+    try {
+      if (
+        url.pathname.startsWith("/api/company") ||
+        url.pathname.startsWith("/api/roles") ||
+        url.pathname.startsWith("/api/sessions")
+      ) {
+        response = await handleCompanyRoutes(req);
+      } else if (
+        url.pathname.startsWith("/api/candidate") ||
+        url.pathname.startsWith("/api/invite")
+      ) {
+        response = await handleCandidateRoutes(req);
+      } else {
+        response = new Response(
+          JSON.stringify({ message: "Voice Agent Interviewer API" }),
+          { headers: { "Content-Type": "application/json" } }
+        );
+      }
+    } catch (error) {
+      console.error(
+        `Unhandled error while handling ${req.method} ${url.pathname}:`,
+        errorMessage(error)
+      );
       response = new Response(
-        JSON.stringify({ message: "Voice Agent Interviewer API" }),
-        { headers: { "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Internal server error" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
       );
     }
 

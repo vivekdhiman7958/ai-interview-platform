@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
-import api from "../../services/api";
+import api, { getErrorMessage } from "../../services/api";
 
 export default function CandidateLogin() {
   const navigate = useNavigate();
@@ -35,10 +35,8 @@ export default function CandidateLogin() {
       });
       navigate("/candidate/dashboard");
     } catch (err: unknown) {
-      setError(
-        (err as { response?: { data?: { error?: string } } })
-          ?.response?.data?.error ?? "Login failed"
-      );
+      console.error("candidate login failed", err);
+      setError(getErrorMessage(err, "Login failed"));
     } finally {
       setLoading(false);
     }

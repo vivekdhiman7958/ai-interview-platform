@@ -6,6 +6,7 @@ import {
     getRolesById,
     createInvite,
     getInviteByToken,
+    getInviteById,
     createCandidate,
     getCandidateByEmail,
     getCandidateById,
@@ -27,6 +28,7 @@ import {
     verifyToken, 
     extractToken,
   } from "../services/authService";
+import { json, readJsonBody } from "../utils/http";
 
 export async function handleCompanyRoutes(req:Request):Promise<Response>{
     const url = new URL(req.url);
@@ -36,11 +38,13 @@ export async function handleCompanyRoutes(req:Request):Promise<Response>{
 
 //POST /api/company/register
     if(req.method==="POST" && path==="/api/company/register"){
-        const body = await req.json() as {
+        const parsed = await readJsonBody<{
             name:string;
             email:string;
             password:string;
-        };
+        }>(req);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body;
 
         if(!body.name || !body.email || !body.password){
             return json({ error: "name, email and password are required" }, 400);
@@ -65,7 +69,9 @@ export async function handleCompanyRoutes(req:Request):Promise<Response>{
 //POST /api/company/login
 
     if(req.method==="POST" && path==="/api/company/login"){
-        const body = await req.json() as { email: string; password: string };
+        const parsed = await readJsonBody<{ email: string; password: string }>(req);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body;
         if (!body.email || !body.password) {
             return json({ error: "email and password are required" }, 400);
           }
@@ -99,14 +105,16 @@ export async function handleCompanyRoutes(req:Request):Promise<Response>{
 
     // ── POST /api/roles
     if (path === "/api/roles" && method === "POST") {
-    const body = await req.json() as {
+    const parsed = await readJsonBody<{
       title: string;
       description: string;
       tech_stack: string;
       difficulty: string;
       num_questions: number;
       custom_questions: string[];
-    };
+    }>(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
     if (!body.title || !body.tech_stack || !body.difficulty) {
       return json({ error: "title, tech_stack and difficulty are required" }, 400);
@@ -138,7 +146,7 @@ export async function handleCompanyRoutes(req:Request):Promise<Response>{
     if(req.method==="POST" && inviteMatch){
         const roleId = inviteMatch[1];
         if (!roleId) {
-            return new Response("Invalid role ID", { status: 400 });
+            return json({ error: "Invalid role ID" }, 400);
         }
         const role = getRolesById(roleId);
 
@@ -165,21 +173,23 @@ const updateRoleMatch = path.match(/^\/api\/roles\/([^/]+)$/);
 if (updateRoleMatch && method === "PUT") {
   const roleId = updateRoleMatch[1];
   if(!roleId){
-    return json({erorr:"Invalid role ID"},400);
+    return json({error:"Invalid role ID"},400);
   }
   const role = getRolesById(roleId);
 
   if (!role) return json({ error: "Role not found" }, 404);
   if (role.company_id !== companyId) return json({ error: "Forbidden" }, 403);
 
-  const body = await req.json() as {
+  const parsed = await readJsonBody<{
     title?: string;
     description?: string;
     tech_stack?: string;
     difficulty?: string;
     num_questions?: number;
     custom_questions?: string[];
-  };
+  }>(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   updateJobRole(
     roleId,
@@ -188,7 +198,7 @@ if (updateRoleMatch && method === "PUT") {
     body.tech_stack ?? role.tech_stack,
     body.difficulty ?? role.difficulty,
     body.num_questions ?? role.num_questions,
-    JSON.stringify(body.custom_questions ?? JSON.parse(role.custom_questions || "[]"))
+    JSON.stringify(body.custom_questions ?? parseCustomQuestions(role.custom_questions))
   );
 
   return json({ message: "Role updated" });
@@ -199,7 +209,7 @@ const deleteRoleMatch = path.match(/^\/api\/roles\/([^/]+)$/);
 if (deleteRoleMatch && method === "DELETE") {
   const roleId = deleteRoleMatch[1];
   if(!roleId){
-    return json({erorr:"Invalid role ID"},400);
+    return json({error:"Invalid role ID"},400);
   }
   const role = getRolesById(roleId);
 
@@ -215,7 +225,7 @@ if (deleteRoleMatch && method === "DELETE") {
     if (sessionsMatch && method === "GET") {
         const roleId = sessionsMatch[1];
         if (!roleId) {
-            return new Response("Invalid role ID", { status: 400 });
+            return json({ error: "Invalid role ID" }, 400);
         }
         const role = getRolesById(roleId);
 
@@ -245,12 +255,18 @@ if (getRoleMatch && method === "GET") {
         if (sessionMatch && method === "GET") {
             const sessionId = sessionMatch[1];
             if (!sessionId) {
-                return new Response("Invalid role ID", { status: 400 });
+                return json({ error: "Invalid session ID" }, 400);
             }
 
             const session = getSessionById(sessionId);
 
             if (!session) return json({ error: "Session not found" }, 404);
+
+            const invite = getInviteById(session.invite_id);
+            const sessionRole = invite ? getRolesById(invite.role_id) : null;
+            if (!sessionRole || sessionRole.company_id !== companyId) {
+                return json({ error: "Forbidden" }, 403);
+            }
 
             const messages = getMessagesBySession(sessionId);
             return json({ session, messages });
@@ -259,10 +275,13 @@ if (getRoleMatch && method === "GET") {
         return json({ error: "Not found" }, 404);
     }
 
-    function json(data: unknown, status = 200): Response {
-        return new Response(JSON.stringify(data), {
-          status,
-          headers: { "Content-Type": "application/json" },
-    });
-
+function parseCustomQuestions(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch (error) {
+    console.error("Stored custom_questions is not valid JSON:", error);
+    return [];
+  }
 }

@@ -28,8 +28,11 @@ export function buildSystemPromopt(
       if (questions.length > 0) {
         customQuestionsText = `\nThe company has also requested these specific questions be asked during the interview:\n${questions.map((q, i) => `  ${i + 1}. ${q}`).join("\n")}`;
       }
-    } catch {
-      // if custom_questions isn't valid JSON, just skip it
+    } catch (error) {
+      console.error(
+        "Skipping custom questions — stored value is not valid JSON:",
+        error instanceof Error ? error.message : String(error)
+      );
     }
   }
 
