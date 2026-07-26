@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 
-const db = new Database("interview.db");
+const db = new Database(process.env.DB_PATH || "interview.db");
 
 export function initDB(){
     db.run(`
