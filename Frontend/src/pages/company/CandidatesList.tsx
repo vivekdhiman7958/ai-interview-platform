@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../../services/api";
+import AppHeader from "../../components/ui/AppHeader";
+import BackButton from "../../components/ui/BackButton";
+import InlineLoader from "../../components/ui/InlineLoader";
+import EmptyState from "../../components/ui/EmptyState";
+import { formatShortDate } from "../../utils/format";
+import { parseOverallScore, scoreBadgeColor } from "../../utils/score";
 
 type Session = {
   id: string;
@@ -28,53 +34,14 @@ export default function CandidatesList() {
       .finally(() => setLoading(false));
   }, [roleId]);
 
-  function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-
-  function getScore(report: string | null): number | null {
-    if (!report) return null;
-    try {
-      const parsed = JSON.parse(report);
-      return parsed.overallScore ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  function scoreColor(score: number) {
-    if (score >= 7) return "text-green-600 bg-green-50";
-    if (score >= 5) return "text-yellow-600 bg-yellow-50";
-    return "text-red-600 bg-red-50";
-  }
-
   return (
     <div
       className="min-h-screen bg-[#F8FAFC]"
       style={{ fontFamily: "'Inter', system-ui, sans-serif" }}
     >
-      {/* Navbar */}
-      <header className="bg-white border-b border-[#E2E8F0] px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-[#0052FF] rounded-lg flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="6" y1="4" x2="6" y2="20" /><line x1="10" y1="8" x2="10" y2="16" />
-              <line x1="14" y1="5" x2="14" y2="19" /><line x1="18" y1="9" x2="18" y2="15" />
-            </svg>
-          </div>
-          <span className="font-bold text-[#0D1B2A]">InterviewAI</span>
-        </div>
-        <button
-          onClick={() => navigate("/company/dashboard")}
-          className="text-sm text-[#64748B] hover:text-[#0D1B2A] transition"
-        >
-          ← Back to dashboard
-        </button>
-      </header>
+      <AppHeader>
+        <BackButton onClick={() => navigate("/company/dashboard")} />
+      </AppHeader>
 
       <div className="max-w-5xl mx-auto px-6 py-10">
 
@@ -89,26 +56,20 @@ export default function CandidatesList() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-6 h-6 border-2 border-[#0052FF] border-t-transparent rounded-full animate-spin" />
-          </div>
+          <InlineLoader />
         ) : sessions.length === 0 ? (
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-16 text-center">
-            <div className="w-12 h-12 bg-[#EBF1FF] rounded-xl flex items-center justify-center mx-auto mb-4">
+          <EmptyState
+            icon={
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0052FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
-            </div>
-            <h3 className="font-semibold text-[#0D1B2A] mb-2">
-              No candidates yet
-            </h3>
-            <p className="text-sm text-[#64748B]">
-              Share the invite link from the dashboard to start receiving interviews
-            </p>
-          </div>
+            }
+            title="No candidates yet"
+            description="Share the invite link from the dashboard to start receiving interviews"
+          />
         ) : (
           <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden">
 
@@ -123,7 +84,7 @@ export default function CandidatesList() {
 
             {/* Table rows */}
             {sessions.map((session) => {
-              const score = getScore(session.report);
+              const score = parseOverallScore(session.report);
               return (
                 <div
                   key={session.id}
@@ -146,13 +107,13 @@ export default function CandidatesList() {
 
                   <div className="col-span-2">
                     <span className="text-sm text-[#64748B]">
-                      {formatDate(session.created_at)}
+                      {formatShortDate(session.created_at)}
                     </span>
                   </div>
 
                   <div className="col-span-2">
                     {score !== null ? (
-                      <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg ${scoreColor(score)}`}>
+                      <span className={`text-sm font-semibold px-2.5 py-1 rounded-lg ${scoreBadgeColor(score)}`}>
                         {score}/10
                       </span>
                     ) : session.ended_at ? (

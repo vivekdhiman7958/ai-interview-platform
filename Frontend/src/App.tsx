@@ -18,17 +18,12 @@ import InterviewPage from "./pages/interview/InterviewPage";
 import EditRole from "./pages/company/EditRole";
 
 import ProtectedRoute from "./components/ui/ProtectedRoute";
+import LoadingScreen from "./components/ui/LoadingScreen";
 
 export default function App() {
   const { isLoading } = useAuth();
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (isLoading) return <LoadingScreen size="md" />;
 
   return (
     <Routes>

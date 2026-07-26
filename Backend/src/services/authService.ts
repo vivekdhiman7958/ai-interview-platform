@@ -36,3 +36,13 @@ export function extractToken(req: Request): string | null {
     if (!auth || !auth.startsWith("Bearer ")) return null;
     return auth.slice(7);
   }
+
+export function authenticateRequest(
+    req: Request,
+    role: TokenPayload["role"]
+  ): TokenPayload | null {
+    const token = extractToken(req);
+    const payload = token ? verifyToken(token) : null;
+    if (!payload || payload.role !== role) return null;
+    return payload;
+  }

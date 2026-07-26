@@ -1,17 +1,9 @@
 import { type GithubProfileSummary } from "./githubService";
-
-type JobRole = {
-  title: string;
-  description: string;
-  tech_stack: string;
-  difficulty: string;
-  num_questions: number;
-  custom_questions: string;
-};
+import { type JobRoleRow } from "./dbService";
 
 export function buildSystemPromopt(
   profile: GithubProfileSummary,
-  role: JobRole
+  role: JobRoleRow
 ): string {
   const repoList = profile.topRepos
     .map((repo) => {

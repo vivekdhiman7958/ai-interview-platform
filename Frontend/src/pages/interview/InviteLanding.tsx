@@ -2,14 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
 import api from "../../services/api";
-
-type RoleInfo = {
-  title: string;
-  description: string;
-  tech_stack: string;
-  difficulty: string;
-  num_questions: number;
-};
+import BrandMark from "../../components/ui/BrandMark";
+import DifficultyBadge from "../../components/ui/DifficultyBadge";
+import LoadingScreen from "../../components/ui/LoadingScreen";
+import PrimaryButton from "../../components/ui/PrimaryButton";
+import type { RoleInfo } from "../../types/interview";
 
 export default function InviteLanding() {
   const { token } = useParams();
@@ -62,19 +59,7 @@ export default function InviteLanding() {
     navigate(`/interview/${token}/start`);
   }
 
-  const difficultyColor: Record<string, string> = {
-    easy: "bg-green-100 text-green-700",
-    medium: "bg-yellow-100 text-yellow-700",
-    hard: "bg-red-100 text-red-700",
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-[#0052FF] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <LoadingScreen />;
 
   if (error || !role) {
     return (
@@ -104,15 +89,8 @@ export default function InviteLanding() {
     >
       <div className="w-full max-w-lg">
 
-        {/* Logo */}
-        <div className="flex items-center gap-2 justify-center mb-8">
-          <div className="w-8 h-8 bg-[#0052FF] rounded-lg flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="6" y1="4" x2="6" y2="20" /><line x1="10" y1="8" x2="10" y2="16" />
-              <line x1="14" y1="5" x2="14" y2="19" /><line x1="18" y1="9" x2="18" y2="15" />
-            </svg>
-          </div>
-          <span className="font-bold text-[#0D1B2A] text-lg">InterviewAI</span>
+        <div className="flex justify-center mb-8">
+          <BrandMark size="lg" />
         </div>
 
         <div className="bg-white border border-[#E2E8F0] rounded-xl p-8 shadow-sm">
@@ -138,9 +116,7 @@ export default function InviteLanding() {
           <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-5 mb-6">
             <div className="flex items-start justify-between gap-3 mb-3">
               <h2 className="font-semibold text-[#0D1B2A] text-base">{role.title}</h2>
-              <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full capitalize shrink-0 ${difficultyColor[role.difficulty] ?? "bg-gray-100 text-gray-600"}`}>
-                {role.difficulty}
-              </span>
+              <DifficultyBadge difficulty={role.difficulty} />
             </div>
             {role.description && (
               <p className="text-sm text-[#64748B] mb-3">{role.description}</p>
@@ -198,22 +174,17 @@ export default function InviteLanding() {
                         You can view your report below
                       </p>
                     </div>
-                    <button
-                      type="button"
+                    <PrimaryButton
                       onClick={() => navigate(`/candidate/sessions/${alreadyCompleted}`)}
-                      className="w-full bg-[#0052FF] hover:bg-[#0046DD] text-white font-semibold text-sm py-3 rounded-lg transition"
+                      className="py-3"
                     >
                       View my report →
-                    </button>
+                    </PrimaryButton>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleStart}
-                    className="w-full bg-[#0052FF] hover:bg-[#0046DD] text-white font-semibold text-sm py-3 rounded-lg transition"
-                  >
+                  <PrimaryButton onClick={handleStart} className="py-3">
                     Start interview →
-                  </button>
+                  </PrimaryButton>
                 )}
               </div>
             ) : (
@@ -221,13 +192,9 @@ export default function InviteLanding() {
                 <p className="text-sm text-center text-[#64748B] mb-4">
                   You need to sign in before starting
                 </p>
-                <button
-                  type="button"
-                  onClick={handleStart}
-                  className="w-full bg-[#0052FF] hover:bg-[#0046DD] text-white font-semibold text-sm py-3 rounded-lg transition"
-                >
+                <PrimaryButton onClick={handleStart} className="py-3">
                   Sign in to start →
-                </button>
+                </PrimaryButton>
               </div>
             )}
         </div>

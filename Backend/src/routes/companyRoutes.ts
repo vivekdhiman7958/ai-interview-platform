@@ -1,105 +1,56 @@
 import {
-    createCompany,
-    getCompanyByEmail,
-    createJobRole,
-    getRolesByCompany,
-    getRolesById,
-    createInvite,
-    getInviteByToken,
-    createCandidate,
-    getCandidateByEmail,
-    getCandidateById,
-    createSession,
-    endSession,
-    saveReport,
-    saveMessage,
-    updateJobRole,
-    deleteJobRole,
-    getSessionsByCandidate,
-    getSessionsByRole,
-    getSessionById,
-    getMessagesBySession
+  createJobRole,
+  getRolesByCompany,
+  getRolesById,
+  createInvite,
+  updateJobRole,
+  deleteJobRole,
+  getSessionsByRole,
+  getSessionById,
+  getMessagesBySession,
+  type JobRoleRow,
 } from "../services/dbService";
-import {
-    hashPassword,
-    verifyPassword,
-    generateToken,
-    verifyToken, 
-    extractToken,
-  } from "../services/authService";
+import { authenticateRequest } from "../services/authService";
+import { loginAccount, registerAccount } from "../services/accountService";
+import { frontendOrigin, json, matchParam, normalizePath } from "../utils/http";
 
-export async function handleCompanyRoutes(req:Request):Promise<Response>{
-    const url = new URL(req.url);
-    // const path = url.pathname;
-    const path = url.pathname.replace(/\/$/, "");
-    const method = req.method;
+const ROLE_PATH = /^\/api\/roles\/([^/]+)$/;
 
-//POST /api/company/register
-    if(req.method==="POST" && path==="/api/company/register"){
-        const body = await req.json() as {
-            name:string;
-            email:string;
-            password:string;
-        };
+function findOwnedRole(
+  roleId: string,
+  companyId: string
+): JobRoleRow | Response {
+  const role = getRolesById(roleId);
+  if (!role) return json({ error: "Role not found" }, 404);
+  if (role.company_id !== companyId) return json({ error: "Forbidden" }, 403);
+  return role;
+}
 
-        if(!body.name || !body.email || !body.password){
-            return json({ error: "name, email and password are required" }, 400);
-        }
+export async function handleCompanyRoutes(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const path = normalizePath(url);
+  const method = req.method;
 
-        const existing = getCompanyByEmail(body.email);
-        if (existing) {
-            return json({ error: "Email already registered" }, 409);
-          }
+  // ── POST /api/company/register
+  if (path === "/api/company/register" && method === "POST") {
+    return registerAccount(req, "company");
+  }
 
-        const id = crypto.randomUUID();
+  // ── POST /api/company/login
+  if (path === "/api/company/login" && method === "POST") {
+    return loginAccount(req, "company");
+  }
 
-        const hashed = await hashPassword(body.password);
-        createCompany(id,body.name, body.email, hashed);
+  const payload = authenticateRequest(req, "company");
+  if (!payload) {
+    return json({ error: "Unauthorized" }, 401);
+  }
 
-        const token = generateToken({ id, email: body.email, role: "company" });
-        
-        return json({ token, company: { id, name: body.name, email: body.email } }, 201);
-    }
+  const companyId = payload.id;
 
-
-//POST /api/company/login
-
-    if(req.method==="POST" && path==="/api/company/login"){
-        const body = await req.json() as { email: string; password: string };
-        if (!body.email || !body.password) {
-            return json({ error: "email and password are required" }, 400);
-          }
-        
-        const company = getCompanyByEmail(body.email);
-          if (!company) {
-            return json({ error: "Invalid credentials" }, 401);
-          }
-        
-        const valid = await verifyPassword(body.password, company.password);
-          if (!valid) {
-            return json({ error: "Invalid credentials" }, 401);
-          }
-
-        const token = generateToken({
-            id: company.id,
-            email: company.email,
-            role: "company",
-          });
-          return json({ token, company: { id: company.id, name: company.name, email: company.email } });
-    }
-
-    const token = extractToken(req);
-    const payload = token ? verifyToken(token) : null;
-
-    if (!payload || payload.role !== "company") {
-        return json({ error: "Unauthorized" }, 401);
-      }
-
-    const companyId = payload.id;
-
-    // ── POST /api/roles
-    if (path === "/api/roles" && method === "POST") {
-    const body = await req.json() as {
+  // ── POST /api/roles
+  if (path === "/api/roles" && method === "POST") {
+    const body = (await req.json()) as {
       title: string;
       description: string;
       tech_stack: string;
@@ -127,142 +78,80 @@ export async function handleCompanyRoutes(req:Request):Promise<Response>{
     return json({ id, message: "Job role created" }, 201);
   }
 
-
-    if (path === "/api/roles" && method === "GET") {
-      const roles = getRolesByCompany(companyId);
-      return json({ roles });
-    }
-
-// ── POST /api/roles/:roleId/invite
-    const inviteMatch = path.match(/^\/api\/roles\/([^/]+)\/invite$/);
-    if(req.method==="POST" && inviteMatch){
-        const roleId = inviteMatch[1];
-        if (!roleId) {
-            return new Response("Invalid role ID", { status: 400 });
-        }
-        const role = getRolesById(roleId);
-
-        if (!role) {
-            return json({ error: "Role not found" }, 404);
-          }
-
-        if (role.company_id !== companyId) {
-            return json({ error: "Forbidden" }, 403);
-          }
-
-        const inviteId = crypto.randomUUID();
-        const token = crypto.randomUUID();
-        createInvite(inviteId, roleId, token);
-
-        const inviteLink = `http://localhost:5173/interview/${token}`;
-        return json({ inviteLink, token }, 201);
-    }
-
-
-
-    // ── PUT /api/roles/:roleId ───────────────────────────────
-const updateRoleMatch = path.match(/^\/api\/roles\/([^/]+)$/);
-if (updateRoleMatch && method === "PUT") {
-  const roleId = updateRoleMatch[1];
-  if(!roleId){
-    return json({erorr:"Invalid role ID"},400);
+  // ── GET /api/roles
+  if (path === "/api/roles" && method === "GET") {
+    return json({ roles: getRolesByCompany(companyId) });
   }
-  const role = getRolesById(roleId);
 
-  if (!role) return json({ error: "Role not found" }, 404);
-  if (role.company_id !== companyId) return json({ error: "Forbidden" }, 403);
+  // ── POST /api/roles/:roleId/invite
+  const inviteRoleId = matchParam(path, /^\/api\/roles\/([^/]+)\/invite$/);
+  if (inviteRoleId && method === "POST") {
+    const role = findOwnedRole(inviteRoleId, companyId);
+    if (role instanceof Response) return role;
 
-  const body = await req.json() as {
-    title?: string;
-    description?: string;
-    tech_stack?: string;
-    difficulty?: string;
-    num_questions?: number;
-    custom_questions?: string[];
-  };
+    const inviteId = crypto.randomUUID();
+    const token = crypto.randomUUID();
+    createInvite(inviteId, role.id, token);
 
-  updateJobRole(
-    roleId,
-    body.title ?? role.title,
-    body.description ?? role.description,
-    body.tech_stack ?? role.tech_stack,
-    body.difficulty ?? role.difficulty,
-    body.num_questions ?? role.num_questions,
-    JSON.stringify(body.custom_questions ?? JSON.parse(role.custom_questions || "[]"))
-  );
-
-  return json({ message: "Role updated" });
-}
-
-// ── DELETE /api/roles/:roleId ────────────────────────────
-const deleteRoleMatch = path.match(/^\/api\/roles\/([^/]+)$/);
-if (deleteRoleMatch && method === "DELETE") {
-  const roleId = deleteRoleMatch[1];
-  if(!roleId){
-    return json({erorr:"Invalid role ID"},400);
+    return json({ inviteLink: `${frontendOrigin}/interview/${token}`, token }, 201);
   }
-  const role = getRolesById(roleId);
 
-  if (!role) return json({ error: "Role not found" }, 404);
-  if (role.company_id !== companyId) return json({ error: "Forbidden" }, 403);
+  // ── GET /api/roles/:roleId/sessions
+  const sessionsRoleId = matchParam(path, /^\/api\/roles\/([^/]+)\/sessions$/);
+  if (sessionsRoleId && method === "GET") {
+    const role = findOwnedRole(sessionsRoleId, companyId);
+    if (role instanceof Response) return role;
 
-  deleteJobRole(roleId);
-  return json({ message: "Role deleted" });
-}
+    return json({ sessions: getSessionsByRole(role.id) });
+  }
 
-// ── POST /api/roles/:roleId/invite
-    const sessionsMatch = path.match(/^\/api\/roles\/([^/]+)\/sessions$/);
-    if (sessionsMatch && method === "GET") {
-        const roleId = sessionsMatch[1];
-        if (!roleId) {
-            return new Response("Invalid role ID", { status: 400 });
-        }
-        const role = getRolesById(roleId);
+  // ── GET | PUT | DELETE /api/roles/:roleId
+  const roleId = matchParam(path, ROLE_PATH);
+  if (roleId && (method === "GET" || method === "PUT" || method === "DELETE")) {
+    const role = findOwnedRole(roleId, companyId);
+    if (role instanceof Response) return role;
 
-        if (!role) return json({ error: "Role not found" }, 404);
-        if (role.company_id !== companyId) return json({ error: "Forbidden" }, 403);
-
-        const sessions = getSessionsByRole(roleId);
-        return json({ sessions });
+    if (method === "GET") {
+      return json({ role });
     }
 
+    if (method === "PUT") {
+      const body = (await req.json()) as {
+        title?: string;
+        description?: string;
+        tech_stack?: string;
+        difficulty?: string;
+        num_questions?: number;
+        custom_questions?: string[];
+      };
 
-    // ── GET /api/roles/:roleId ───────────────────────────────
-const getRoleMatch = path.match(/^\/api\/roles\/([^/]+)$/);
-if (getRoleMatch && method === "GET") {
-  const roleId = getRoleMatch[1];
-  if(!roleId){
-    return json({error:"Invalid role ID"},400);
-  }
-  const role = getRolesById(roleId);
-  if (!role) return json({ error: "Role not found" }, 404);
-  if (role.company_id !== companyId) return json({ error: "Forbidden" }, 403);
-  return json({ role });
-}
+      updateJobRole(
+        role.id,
+        body.title ?? role.title,
+        body.description ?? role.description,
+        body.tech_stack ?? role.tech_stack,
+        body.difficulty ?? role.difficulty,
+        body.num_questions ?? role.num_questions,
+        JSON.stringify(
+          body.custom_questions ?? JSON.parse(role.custom_questions || "[]")
+        )
+      );
 
-// ── GET /api/sessions/:sessionId ────────────────────────
-    const sessionMatch = path.match(/^\/api\/sessions\/([^/]+)$/);
-        if (sessionMatch && method === "GET") {
-            const sessionId = sessionMatch[1];
-            if (!sessionId) {
-                return new Response("Invalid role ID", { status: 400 });
-            }
-
-            const session = getSessionById(sessionId);
-
-            if (!session) return json({ error: "Session not found" }, 404);
-
-            const messages = getMessagesBySession(sessionId);
-            return json({ session, messages });
-        }
-
-        return json({ error: "Not found" }, 404);
+      return json({ message: "Role updated" });
     }
 
-    function json(data: unknown, status = 200): Response {
-        return new Response(JSON.stringify(data), {
-          status,
-          headers: { "Content-Type": "application/json" },
-    });
+    deleteJobRole(role.id);
+    return json({ message: "Role deleted" });
+  }
 
+  // ── GET /api/sessions/:sessionId
+  const sessionId = matchParam(path, /^\/api\/sessions\/([^/]+)$/);
+  if (sessionId && method === "GET") {
+    const session = getSessionById(sessionId);
+    if (!session) return json({ error: "Session not found" }, 404);
+
+    return json({ session, messages: getMessagesBySession(sessionId) });
+  }
+
+  return json({ error: "Not found" }, 404);
 }

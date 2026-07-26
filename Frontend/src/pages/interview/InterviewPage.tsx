@@ -1,18 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
+import BrandMark from "../../components/ui/BrandMark";
+import PrimaryButton from "../../components/ui/PrimaryButton";
+import Spinner from "../../components/ui/Spinner";
+import { fieldClass } from "../../components/ui/fieldStyles";
+import { formatElapsed } from "../../utils/format";
+import { scoreColor } from "../../utils/score";
+import { WS_BASE_URL } from "../../config";
+import type { Report } from "../../types/interview";
 
 type Message = { role: "user" | "assistant"; content: string };
 type Status = "connecting" | "waiting-github" | "ai-speaking" | "user-speaking" | "thinking" | "evaluating" | "ended";
-type Report = {
-  overallScore: number;
-  communicationScore: number;
-  technicalScore: number;
-  problemSolvingScore: number;
-  strengths: string[];
-  improvements: string[];
-  summary: string;
-};
 
 export default function InterviewPage() {
   const { token } = useParams();
@@ -80,7 +79,9 @@ export default function InterviewPage() {
   // WebSocket
   useEffect(() => {
     if (!user || !token) return;
-    const ws = new WebSocket(`ws://localhost:3000/interview?token=${token}&authToken=${user.token}`);
+    const ws = new WebSocket(
+      `${WS_BASE_URL}/interview?token=${token}&authToken=${user.token}`
+    );
     wsRef.current = ws;
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data) as { type: string; message?: string; report?: Report; sessionId?: string; };
@@ -162,24 +163,13 @@ export default function InterviewPage() {
     wsRef.current?.send(JSON.stringify({ type: "end" }));
   }
 
-  function formatTimer(s: number) {
-    const m = Math.floor(s / 60).toString().padStart(2, "0");
-    const sec = (s % 60).toString().padStart(2, "0");
-    return `${m}:${sec}`;
-  }
-
-  function scoreColor(score: number) {
-    if (score >= 7) return "text-green-600";
-    if (score >= 5) return "text-yellow-600";
-    return "text-red-500";
-  }
 
   // EVALUATING
   if (status === "evaluating") {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
         <div className="text-center">
-          <div className="w-14 h-14 border-4 border-[#0052FF] border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+          <Spinner size="lg" className="mx-auto mb-6" />
           <h2 className="text-lg font-semibold text-[#0D1B2A] mb-1">Generating your report</h2>
           <p className="text-sm text-[#64748B]">This takes about 10 seconds...</p>
         </div>
@@ -192,14 +182,8 @@ export default function InterviewPage() {
     return (
       <div className="min-h-screen bg-[#F8FAFC] px-4 py-10" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
         <div className="max-w-2xl mx-auto">
-          <div className="flex items-center gap-2 justify-center mb-8">
-            <div className="w-8 h-8 bg-[#0052FF] rounded-lg flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="6" y1="4" x2="6" y2="20" /><line x1="10" y1="8" x2="10" y2="16" />
-                <line x1="14" y1="5" x2="14" y2="19" /><line x1="18" y1="9" x2="18" y2="15" />
-              </svg>
-            </div>
-            <span className="font-bold text-[#0D1B2A] text-lg">InterviewAI</span>
+          <div className="flex justify-center mb-8">
+            <BrandMark size="lg" />
           </div>
 
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-6 mb-4 text-center">
@@ -262,13 +246,9 @@ export default function InterviewPage() {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => navigate("/candidate/dashboard")}
-            className="w-full bg-[#0052FF] hover:bg-[#0046DD] text-white font-semibold text-sm py-3 rounded-lg transition"
-          >
+          <PrimaryButton onClick={() => navigate("/candidate/dashboard")} className="py-3">
             Go to dashboard
-          </button>
+          </PrimaryButton>
         </div>
       </div>
     );
@@ -283,21 +263,13 @@ export default function InterviewPage() {
 
       {/* Top bar — fixed */}
       <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-[#E2E8F0] shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-[#0052FF] rounded-md flex items-center justify-center">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="6" y1="4" x2="6" y2="20" /><line x1="10" y1="8" x2="10" y2="16" />
-              <line x1="14" y1="5" x2="14" y2="19" /><line x1="18" y1="9" x2="18" y2="15" />
-            </svg>
-          </div>
-          <span className="font-semibold text-[#0D1B2A] text-sm">InterviewAI</span>
-        </div>
+        <BrandMark size="sm" />
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-[#F1F5F9] px-3 py-1 rounded-lg">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
-            <span className="text-xs font-mono text-[#64748B]">{formatTimer(timer)}</span>
+            <span className="text-xs font-mono text-[#64748B]">{formatElapsed(timer)}</span>
           </div>
           {cameraEnabled && (
             <div className="flex items-center gap-1.5 text-xs font-medium text-red-500">
@@ -336,15 +308,11 @@ export default function InterviewPage() {
                 value={github}
                 onChange={(e) => setGithub(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleGithubSubmit()}
-                className="w-full border border-[#E2E8F0] rounded-lg px-3.5 py-2.5 text-sm text-[#0D1B2A] outline-none focus:border-[#0052FF] transition placeholder:text-[#94A3B8] mb-3"
+                className={`${fieldClass} mb-3`}
               />
-              <button
-                type="button"
-                onClick={handleGithubSubmit}
-                className="w-full bg-[#0052FF] hover:bg-[#0046DD] text-white font-semibold text-sm py-2.5 rounded-lg transition"
-              >
+              <PrimaryButton onClick={handleGithubSubmit}>
                 Start interview →
-              </button>
+              </PrimaryButton>
             </div>
           )}
 
