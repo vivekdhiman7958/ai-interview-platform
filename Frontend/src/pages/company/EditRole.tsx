@@ -5,7 +5,7 @@ import AppHeader from "../../components/ui/AppHeader";
 import BackButton from "../../components/ui/BackButton";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import RoleForm from "../../components/company/RoleForm";
-import { getApiErrorMessage } from "../../utils/errors";
+import { getApiErrorMessage, safeJsonParse } from "../../utils/errors";
 import type { RoleFormValues } from "../../types/interview";
 
 export default function EditRole() {
@@ -34,10 +34,14 @@ export default function EditRole() {
           tech_stack: r.tech_stack,
           difficulty: r.difficulty,
           num_questions: r.num_questions,
-          custom_questions: JSON.parse(r.custom_questions || "[]"),
+          custom_questions:
+            safeJsonParse<string[]>(r.custom_questions, "custom questions") ?? [],
         });
       })
-      .catch(() => setError("Failed to load role"))
+      .catch((err) => {
+        console.error("Failed to load role", roleId, err);
+        setError(getApiErrorMessage(err, "Failed to load role"));
+      })
       .finally(() => setFetching(false));
   }, [roleId]);
 
@@ -52,6 +56,7 @@ export default function EditRole() {
       await api.put(`/api/roles/${roleId}`, form);
       navigate("/company/dashboard");
     } catch (err: unknown) {
+      console.error("Failed to update role", roleId, err);
       setError(getApiErrorMessage(err, "Failed to update role"));
     } finally {
       setLoading(false);

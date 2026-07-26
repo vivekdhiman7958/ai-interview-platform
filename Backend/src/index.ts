@@ -1,5 +1,6 @@
-import { initDB, getInviteByToken } from "./services/dbService";
+import { initDB } from "./services/dbService";
 import { verifyToken } from "./services/authService";
+import { getInviteByToken } from "./services/dbService";
 import {
   interviewWebSocketHandler,
   buildUpgradeData,
@@ -7,7 +8,7 @@ import {
 } from "./routes/interviewSocket";
 import { handleCompanyRoutes } from "./routes/companyRoutes";
 import { handleCandidateRoutes } from "./routes/candidateRoutes";
-import { corsHeaders, json, withCors } from "./utils/http";
+import { corsHeaders, errorMessage, json, withCors } from "./utils/http";
 
 initDB();
 
@@ -21,7 +22,7 @@ const server = Bun.serve<SocketData>({
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // ── WebSocket upgrade 
+    // ── WebSocket upgrade
     if (url.pathname === "/interview") {
       const inviteToken = url.searchParams.get("token");
       const authToken = url.searchParams.get("authToken");
@@ -46,24 +47,34 @@ const server = Bun.serve<SocketData>({
       });
 
       if (upgraded) return undefined;
+
+      return withCors(json({ error: "WebSocket upgrade failed" }, 400));
     }
 
-    // ── HTTP routes 
+    // ── HTTP routes
     let response: Response;
 
-    if (
-      url.pathname.startsWith("/api/company") ||
-      url.pathname.startsWith("/api/roles") ||
-      url.pathname.startsWith("/api/sessions")
-    ) {
-      response = await handleCompanyRoutes(req);
-    } else if (
-      url.pathname.startsWith("/api/candidate") ||
-      url.pathname.startsWith("/api/invite")
-    ) {
-      response = await handleCandidateRoutes(req);
-    } else {
-      response = json({ message: "Voice Agent Interviewer API" });
+    try {
+      if (
+        url.pathname.startsWith("/api/company") ||
+        url.pathname.startsWith("/api/roles") ||
+        url.pathname.startsWith("/api/sessions")
+      ) {
+        response = await handleCompanyRoutes(req);
+      } else if (
+        url.pathname.startsWith("/api/candidate") ||
+        url.pathname.startsWith("/api/invite")
+      ) {
+        response = await handleCandidateRoutes(req);
+      } else {
+        response = json({ message: "Voice Agent Interviewer API" });
+      }
+    } catch (error) {
+      console.error(
+        `Unhandled error while handling ${req.method} ${url.pathname}:`,
+        errorMessage(error)
+      );
+      response = json({ error: "Internal server error" }, 500);
     }
 
     return withCors(response);

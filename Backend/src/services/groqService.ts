@@ -15,17 +15,28 @@ type GroqResponse = {
 };
 
 export async function askGroq(messages: ChatMessage[]): Promise<string> {
-  const response = await fetch(GROQ_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: messages,
-    }),
-  });
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY is not configured");
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: messages,
+      }),
+    });
+  } catch (error) {
+    throw new Error(
+      `Could not reach the Groq API: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -34,5 +45,9 @@ export async function askGroq(messages: ChatMessage[]): Promise<string> {
   }
 
   const data = (await response.json()) as GroqResponse;
-  return data.choices[0]?.message.content??"";
+  const content = data.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error("Groq API returned no completion content");
+  }
+  return content;
 }

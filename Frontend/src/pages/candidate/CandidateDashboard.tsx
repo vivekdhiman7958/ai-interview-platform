@@ -5,7 +5,9 @@ import api from "../../services/api";
 import UserHeader from "../../components/ui/UserHeader";
 import InlineLoader from "../../components/ui/InlineLoader";
 import EmptyState from "../../components/ui/EmptyState";
+import ErrorCard from "../../components/ui/ErrorCard";
 import ScoreBadge from "../../components/interview/ScoreBadge";
+import { getApiErrorMessage } from "../../utils/errors";
 import { formatShortDate } from "../../utils/format";
 import { parseOverallScore } from "../../utils/score";
 
@@ -24,11 +26,15 @@ export default function CandidateDashboard() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     api.get("/api/candidate/sessions")
-      .then((res) => setSessions(res.data.sessions))
-      .catch(console.error)
+      .then((res) => setSessions(res.data.sessions ?? []))
+      .catch((err) => {
+        console.error("Failed to load candidate sessions", err);
+        setError(getApiErrorMessage(err, "Failed to load your interviews"));
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -54,6 +60,8 @@ export default function CandidateDashboard() {
 
         {loading ? (
           <InlineLoader />
+        ) : error ? (
+          <ErrorCard message={error} />
         ) : sessions.length === 0 ? (
           <EmptyState
             icon={

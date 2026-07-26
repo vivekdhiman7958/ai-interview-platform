@@ -10,7 +10,7 @@ import {
   generateToken,
   type TokenPayload,
 } from "./authService";
-import { json } from "../utils/http";
+import { json, readJsonBody } from "../utils/http";
 
 type AccountRole = TokenPayload["role"];
 
@@ -23,11 +23,13 @@ export async function registerAccount(
   req: Request,
   role: AccountRole
 ): Promise<Response> {
-  const body = (await req.json()) as {
+  const parsed = await readJsonBody<{
     name?: string;
     email?: string;
     password?: string;
-  };
+  }>(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   if (!body.name || !body.email || !body.password) {
     return json({ error: "name, email and password are required" }, 400);
@@ -52,7 +54,9 @@ export async function loginAccount(
   req: Request,
   role: AccountRole
 ): Promise<Response> {
-  const body = (await req.json()) as { email?: string; password?: string };
+  const parsed = await readJsonBody<{ email?: string; password?: string }>(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   if (!body.email || !body.password) {
     return json({ error: "email and password are required" }, 400);

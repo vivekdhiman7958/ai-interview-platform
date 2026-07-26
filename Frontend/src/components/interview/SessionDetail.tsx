@@ -17,6 +17,7 @@ type Props = {
   onBack: () => void;
   backLabel?: string;
   missingReportMessage: string;
+  error?: string;
 };
 
 export default function SessionDetail({
@@ -29,6 +30,7 @@ export default function SessionDetail({
   onBack,
   backLabel,
   missingReportMessage,
+  error,
 }: Props) {
   const [tab, setTab] = useState<"report" | "transcript">("report");
 
@@ -88,7 +90,7 @@ export default function SessionDetail({
 
         {tab === "report" && !report && (
           <div className="bg-white border border-[#E2E8F0] rounded-xl p-16 text-center">
-            <p className="text-[#64748B] text-sm">{missingReportMessage}</p>
+            <p className="text-[#64748B] text-sm">{error || missingReportMessage}</p>
           </div>
         )}
 

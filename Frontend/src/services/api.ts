@@ -16,8 +16,9 @@ api.interceptors.request.use((config) => {
       if (user.token) {
         config.headers.Authorization = `Bearer ${user.token}`;
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      console.error("Stored auth_user is corrupted, clearing it", error);
+      localStorage.removeItem("auth_user");
     }
   }
   return config;

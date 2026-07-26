@@ -4,6 +4,7 @@ import { useAuth } from "../../context/authContext";
 import BrandMark from "../../components/ui/BrandMark";
 import PrimaryButton from "../../components/ui/PrimaryButton";
 import Spinner from "../../components/ui/Spinner";
+import AlertBanner from "../../components/ui/AlertBanner";
 import { fieldClass } from "../../components/ui/fieldStyles";
 import { formatElapsed } from "../../utils/format";
 import { scoreColor } from "../../utils/score";
@@ -28,6 +29,8 @@ export default function InterviewPage() {
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [videoUrl, setVideoUrl] = useState("");
   const [isListening, setIsListening] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const wsRef = useRef<WebSocket | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -36,9 +39,11 @@ export default function InterviewPage() {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const transcriptRef = useRef<Message[]>([]);
 
   // Auto scroll transcript only
   useEffect(() => {
+    transcriptRef.current = transcript;
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
 
@@ -65,8 +70,12 @@ export default function InterviewPage() {
         };
         recorder.start();
         mediaRecorderRef.current = recorder;
-      } catch {
+      } catch (err) {
+        console.error("Camera/microphone unavailable", err);
         setCameraEnabled(false);
+        setNotice(
+          "Camera and microphone are unavailable, so this interview will not be recorded."
+        );
       }
     }
     setupCamera();
@@ -84,7 +93,31 @@ export default function InterviewPage() {
     );
     wsRef.current = ws;
     ws.onmessage = (event) => {
-      const data = JSON.parse(event.data) as { type: string; message?: string; report?: Report; sessionId?: string; };
+      let data: { type: string; message?: string; report?: Report; sessionId?: string };
+      try {
+        data = JSON.parse(event.data) as typeof data;
+      } catch (err) {
+        console.error("Unparseable message from interview server", err);
+        setError("Received an invalid message from the interview server.");
+        return;
+      }
+
+      if (data.type === "error") {
+        console.error("Interview server error:", data.message);
+        setError(data.message ?? "The interview server reported an error.");
+        window.speechSynthesis.cancel();
+        recognitionRef.current?.stop();
+        setIsListening(false);
+        if (transcriptRef.current.length > 0) {
+          // Interview already started: let the candidate retry their answer.
+          setStatus("user-speaking");
+        } else {
+          setStatus("waiting-github");
+          setGithubSubmitted(false);
+        }
+        return;
+      }
+
       if (data.type === "connected") setStatus("waiting-github");
 
       // here is the change for the multiple interview on the same link
@@ -104,10 +137,47 @@ export default function InterviewPage() {
         if (timerRef.current) clearInterval(timerRef.current);
         mediaRecorderRef.current?.stop();
       }
-      if (data.type === "report") { setReport(data.report ?? null); setStatus("ended"); }
+      if (data.type === "report") {
+        if (!data.report) {
+          setError("The server returned an empty report. Please try again.");
+          return;
+        }
+        setReport(data.report);
+        setStatus("ended");
+      }
     };
-    return () => ws.close();
+
+    ws.onerror = (event) => {
+      console.error("Interview WebSocket error", event);
+      setError("Connection to the interview server failed.");
+    };
+
+    ws.onclose = (event) => {
+      if (event.wasClean && event.code === 1000) return;
+      console.error("Interview WebSocket closed unexpectedly", event.code, event.reason);
+      setError(
+        "The connection to the interview server was lost. Please reload to continue."
+      );
+    };
+
+    return () => ws.close(1000, "page unmounted");
   }, [user, token]);
+
+  function sendToServer(payload: { type: string; payload?: string }): boolean {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setError("Not connected to the interview server. Please reload the page.");
+      return false;
+    }
+    try {
+      ws.send(JSON.stringify(payload));
+      return true;
+    } catch (err) {
+      console.error("Failed to send message to interview server", err);
+      setError("Could not reach the interview server. Please reload the page.");
+      return false;
+    }
+  }
 
   function speakText(text: string) {
     window.speechSynthesis.cancel();
@@ -119,7 +189,12 @@ export default function InterviewPage() {
 
   function startListening() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) {
+      setNotice(
+        "This browser does not support speech recognition. Please use Chrome to answer by voice."
+      );
+      return;
+    }
     const recognition = new SR();
     recognition.continuous = false;
     recognition.interimResults = false;
@@ -131,9 +206,17 @@ export default function InterviewPage() {
       setIsListening(false);
       setStatus("thinking");
       setTranscript((prev) => [...prev, { role: "user", content: text }]);
-      wsRef.current?.send(JSON.stringify({ type: "message", payload: text }));
+      if (!sendToServer({ type: "message", payload: text })) {
+        setStatus("user-speaking");
+      }
     };
-    recognition.onerror = () => setIsListening(false);
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error("Speech recognition error", event.error);
+      setIsListening(false);
+      if (event.error !== "no-speech" && event.error !== "aborted") {
+        setNotice(`Microphone error (${event.error}). Click the mic to try again.`);
+      }
+    };
     recognition.onend = () => setIsListening(false);
     recognition.start();
   }
@@ -145,9 +228,13 @@ export default function InterviewPage() {
 
   function handleGithubSubmit() {
     if (!github.trim()) return;
+    setError("");
     setGithubSubmitted(true);
     setStatus("thinking");
-    wsRef.current?.send(JSON.stringify({ type: "init", payload: github.trim() }));
+    if (!sendToServer({ type: "init", payload: github.trim() })) {
+      setGithubSubmitted(false);
+      setStatus("waiting-github");
+    }
   }
 
   function handleEndInterview() {
@@ -160,7 +247,9 @@ export default function InterviewPage() {
     }
     
     setStatus("evaluating");
-    wsRef.current?.send(JSON.stringify({ type: "end" }));
+    if (!sendToServer({ type: "end" })) {
+      setStatus("user-speaking");
+    }
   }
 
 
@@ -285,6 +374,21 @@ export default function InterviewPage() {
           </button>
         </div>
       </div>
+
+      {(error || notice) && (
+        <div className="px-6 pt-3 flex flex-col gap-2 shrink-0">
+          {error && (
+            <AlertBanner message={error} onDismiss={() => setError("")} />
+          )}
+          {notice && (
+            <AlertBanner
+              message={notice}
+              tone="warning"
+              onDismiss={() => setNotice("")}
+            />
+          )}
+        </div>
+      )}
 
       {/* Body — flex row, fills remaining height */}
       <div className="flex flex-1 overflow-hidden">

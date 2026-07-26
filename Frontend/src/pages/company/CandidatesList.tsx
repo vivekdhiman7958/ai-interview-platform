@@ -5,6 +5,8 @@ import AppHeader from "../../components/ui/AppHeader";
 import BackButton from "../../components/ui/BackButton";
 import InlineLoader from "../../components/ui/InlineLoader";
 import EmptyState from "../../components/ui/EmptyState";
+import ErrorCard from "../../components/ui/ErrorCard";
+import { getApiErrorMessage } from "../../utils/errors";
 import { formatShortDate } from "../../utils/format";
 import { parseOverallScore, scoreBadgeColor } from "../../utils/score";
 
@@ -23,14 +25,16 @@ export default function CandidatesList() {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   //const [roleName, setRoleName] = useState("");
 
   useEffect(() => {
     api.get(`/api/roles/${roleId}/sessions`)
-      .then((res) => {
-        setSessions(res.data.sessions);
+      .then((res) => setSessions(res.data.sessions ?? []))
+      .catch((err) => {
+        console.error("Failed to load sessions for role", roleId, err);
+        setError(getApiErrorMessage(err, "Failed to load candidates for this role"));
       })
-      .catch(console.error)
       .finally(() => setLoading(false));
   }, [roleId]);
 
@@ -57,6 +61,8 @@ export default function CandidatesList() {
 
         {loading ? (
           <InlineLoader />
+        ) : error ? (
+          <ErrorCard message={error} />
         ) : sessions.length === 0 ? (
           <EmptyState
             icon={

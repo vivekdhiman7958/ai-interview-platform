@@ -1,9 +1,12 @@
 import { type GithubProfileSummary } from "./githubService";
 import { type JobRoleRow } from "./dbService";
+import { parseCustomQuestions } from "../utils/http";
+
+type JobRole = Omit<JobRoleRow, "id" | "company_id">;
 
 export function buildSystemPromopt(
   profile: GithubProfileSummary,
-  role: JobRoleRow
+  role: JobRole
 ): string {
   const repoList = profile.topRepos
     .map((repo) => {
@@ -13,17 +16,11 @@ export function buildSystemPromopt(
     })
     .join("\n");
 
-  let customQuestionsText = "";
-  if (role.custom_questions) {
-    try {
-      const questions = JSON.parse(role.custom_questions) as string[];
-      if (questions.length > 0) {
-        customQuestionsText = `\nThe company has also requested these specific questions be asked during the interview:\n${questions.map((q, i) => `  ${i + 1}. ${q}`).join("\n")}`;
-      }
-    } catch {
-      // if custom_questions isn't valid JSON, just skip it
-    }
-  }
+  const questions = parseCustomQuestions(role.custom_questions);
+  const customQuestionsText =
+    questions.length > 0
+      ? `\nThe company has also requested these specific questions be asked during the interview:\n${questions.map((q, i) => `  ${i + 1}. ${q}`).join("\n")}`
+      : "";
 
   return `You are an experienced technical interviewer conducting a mock interview on behalf of a company.
 

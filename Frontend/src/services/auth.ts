@@ -12,7 +12,10 @@ export async function authenticate(
   action: "login" | "register",
   credentials: { name?: string; email: string; password: string }
 ): Promise<AuthUser> {
-  const res = await api.post(`/api/${role}/${action}`, credentials);
+  const res = await api.post(`/api/${role}/${action}`, credentials).catch((error) => {
+    console.error(`${role} ${action} failed`, error);
+    throw error;
+  });
   const account = res.data[role] as { id: string; name: string; email: string };
 
   return {

@@ -31,6 +31,7 @@ export default function CreateRole() {
       await api.post("/api/roles", form);
       navigate("/company/dashboard");
     } catch (err: unknown) {
+      console.error("role creation failed", err);
       setError(getApiErrorMessage(err, "Failed to create role"));
     } finally {
       setLoading(false);

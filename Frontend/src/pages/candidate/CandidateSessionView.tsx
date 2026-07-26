@@ -7,13 +7,14 @@ import { useSessionDetail } from "../../hooks/useSessionDetail";
 export default function CandidateSessionView() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const { session, messages, report, loading } = useSessionDetail(
-    `/api/candidate/sessions/${sessionId}`
+  const { session, messages, report, loading, error } = useSessionDetail(
+    `/api/candidate/sessions/${sessionId}`,
+    "Your report is corrupted and could not be displayed."
   );
 
   if (loading) return <LoadingScreen />;
 
-  if (!session) return <MessageScreen message="Session not found" />;
+  if (!session) return <MessageScreen message={error || "Session not found"} />;
 
   return (
     <SessionDetail
@@ -25,6 +26,7 @@ export default function CandidateSessionView() {
       candidateInitial="Me"
       onBack={() => navigate("/candidate/dashboard")}
       missingReportMessage="No report generated yet."
+      error={error}
     />
   );
 }

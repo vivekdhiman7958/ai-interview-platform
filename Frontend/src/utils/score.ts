@@ -1,3 +1,5 @@
+import { safeJsonParse } from "./errors";
+
 export function scoreColor(score: number): string {
   if (score >= 7) return "text-green-600";
   if (score >= 5) return "text-yellow-600";
@@ -17,12 +19,11 @@ export function scoreBg(score: number): string {
 }
 
 export function parseOverallScore(report: string | null): number | null {
-  if (!report) return null;
-  try {
-    return (JSON.parse(report) as { overallScore?: number }).overallScore ?? null;
-  } catch {
-    return null;
-  }
+  const parsed = safeJsonParse<{ overallScore?: number }>(
+    report,
+    "session report"
+  );
+  return parsed?.overallScore ?? null;
 }
 
 export const difficultyBadgeColor: Record<string, string> = {

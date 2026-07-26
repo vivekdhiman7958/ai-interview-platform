@@ -6,6 +6,7 @@ import BrandMark from "../../components/ui/BrandMark";
 import DifficultyBadge from "../../components/ui/DifficultyBadge";
 import LoadingScreen from "../../components/ui/LoadingScreen";
 import PrimaryButton from "../../components/ui/PrimaryButton";
+import { getApiErrorMessage } from "../../utils/errors";
 import type { RoleInfo } from "../../types/interview";
 
 export default function InviteLanding() {
@@ -40,12 +41,18 @@ export default function InviteLanding() {
             if (alreadyDone) {
               setAlreadyCompleted(alreadyDone.id);
             }
-          } catch {
-            // silently ignore
+          } catch (err) {
+            // Not fatal: the interview socket re-checks for a completed session.
+            console.error("Could not check for a completed session", err);
           }
         }
       })
-      .catch(() => setError("This invite link is invalid or has expired."))
+      .catch((err) => {
+        console.error("Failed to load invite", token, err);
+        setError(
+          getApiErrorMessage(err, "This invite link is invalid or has expired.")
+        );
+      })
       .finally(() => setLoading(false));
   }, [token, user]);
 

@@ -7,13 +7,22 @@ import { useSessionDetail } from "../../hooks/useSessionDetail";
 export default function CompanySessionView() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const { session, messages, report, loading } = useSessionDetail(
-    `/api/sessions/${sessionId}`
+  const { session, messages, report, loading, error } = useSessionDetail(
+    `/api/sessions/${sessionId}`,
+    "The report for this session is corrupted and could not be displayed."
   );
 
   if (loading) return <LoadingScreen />;
 
-  if (!session) return <MessageScreen message="Session not found" />;
+  if (!session) {
+    return (
+      <MessageScreen
+        message={error || "Session not found"}
+        actionLabel="Back to dashboard"
+        onAction={() => navigate("/company/dashboard")}
+      />
+    );
+  }
 
   return (
     <SessionDetail
@@ -26,6 +35,7 @@ export default function CompanySessionView() {
       onBack={() => navigate(-1)}
       backLabel="← Back"
       missingReportMessage="No report generated yet — interview may still be in progress."
+      error={error}
     />
   );
 }

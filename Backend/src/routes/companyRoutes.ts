@@ -3,6 +3,7 @@ import {
   getRolesByCompany,
   getRolesById,
   createInvite,
+  getInviteById,
   updateJobRole,
   deleteJobRole,
   getSessionsByRole,
@@ -12,7 +13,14 @@ import {
 } from "../services/dbService";
 import { authenticateRequest } from "../services/authService";
 import { loginAccount, registerAccount } from "../services/accountService";
-import { frontendOrigin, json, matchParam, normalizePath } from "../utils/http";
+import {
+  frontendOrigin,
+  json,
+  matchParam,
+  normalizePath,
+  parseCustomQuestions,
+  readJsonBody,
+} from "../utils/http";
 
 const ROLE_PATH = /^\/api\/roles\/([^/]+)$/;
 
@@ -50,14 +58,16 @@ export async function handleCompanyRoutes(req: Request): Promise<Response> {
 
   // ── POST /api/roles
   if (path === "/api/roles" && method === "POST") {
-    const body = (await req.json()) as {
+    const parsed = await readJsonBody<{
       title: string;
       description: string;
       tech_stack: string;
       difficulty: string;
       num_questions: number;
       custom_questions: string[];
-    };
+    }>(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
     if (!body.title || !body.tech_stack || !body.difficulty) {
       return json({ error: "title, tech_stack and difficulty are required" }, 400);
@@ -116,14 +126,16 @@ export async function handleCompanyRoutes(req: Request): Promise<Response> {
     }
 
     if (method === "PUT") {
-      const body = (await req.json()) as {
+      const parsed = await readJsonBody<{
         title?: string;
         description?: string;
         tech_stack?: string;
         difficulty?: string;
         num_questions?: number;
         custom_questions?: string[];
-      };
+      }>(req);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.body;
 
       updateJobRole(
         role.id,
@@ -133,7 +145,7 @@ export async function handleCompanyRoutes(req: Request): Promise<Response> {
         body.difficulty ?? role.difficulty,
         body.num_questions ?? role.num_questions,
         JSON.stringify(
-          body.custom_questions ?? JSON.parse(role.custom_questions || "[]")
+          body.custom_questions ?? parseCustomQuestions(role.custom_questions)
         )
       );
 
@@ -149,6 +161,12 @@ export async function handleCompanyRoutes(req: Request): Promise<Response> {
   if (sessionId && method === "GET") {
     const session = getSessionById(sessionId);
     if (!session) return json({ error: "Session not found" }, 404);
+
+    const invite = getInviteById(session.invite_id);
+    const sessionRole = invite ? getRolesById(invite.role_id) : null;
+    if (!sessionRole || sessionRole.company_id !== companyId) {
+      return json({ error: "Forbidden" }, 403);
+    }
 
     return json({ session, messages: getMessagesBySession(sessionId) });
   }
