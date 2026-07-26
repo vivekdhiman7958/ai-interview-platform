@@ -12,6 +12,7 @@ import {
   getRolesById,
   getCompletedSessionByInviteAndCandidate,
 } from "../services/dbService";
+import { errorMessage } from "../utils/http";
 
 export type SocketData = {
   sessionId: string;
@@ -36,6 +37,10 @@ export function buildUpgradeData(
   };
 }
 
+function sendError(ws: Bun.ServerWebSocket<SocketData>, message: string) {
+  ws.send(JSON.stringify({ type: "error", message }));
+}
+
 export const interviewWebSocketHandler = {
   async open(ws: Bun.ServerWebSocket<SocketData>) {
     console.log(`Client connected — session: ${ws.data.sessionId}`);
@@ -53,7 +58,20 @@ export const interviewWebSocketHandler = {
     message: string | Buffer
   ) {
     const raw = message.toString();
-    const parsed = JSON.parse(raw) as { type: string; payload: string };
+
+    let parsed: { type: string; payload: string };
+    try {
+      parsed = JSON.parse(raw) as { type: string; payload: string };
+    } catch (error) {
+      console.error("Invalid WebSocket frame:", errorMessage(error));
+      sendError(ws, "Malformed message. Expected JSON.");
+      return;
+    }
+
+    if (typeof parsed?.type !== "string") {
+      sendError(ws, "Message is missing a 'type' field.");
+      return;
+    }
 
     if (parsed.type === "init") {
       const githubUsername = parsed.payload;
@@ -64,19 +82,13 @@ export const interviewWebSocketHandler = {
 
         const invite = getInviteById(ws.data.inviteId);
         if (!invite) {
-          ws.send(JSON.stringify({
-            type: "error",
-            message: "Invalid invite. Please use a valid interview link.",
-          }));
+          sendError(ws, "Invalid invite. Please use a valid interview link.");
           return;
         }
 
         const role = getRolesById(invite.role_id);
         if (!role) {
-          ws.send(JSON.stringify({
-            type: "error",
-            message: "Job role not found.",
-          }));
+          sendError(ws, "Job role not found.");
           return;
         }
 
@@ -116,13 +128,15 @@ export const interviewWebSocketHandler = {
         }));
 
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error("Init error:", message);
-        ws.send(JSON.stringify({
-          type: "error",
-          //message: `Debug: ${message}`,
-          message: "Could not start interview. Please check your GitHub username."
-        }));
+        console.error(
+          `Init error (session ${ws.data.sessionId}, github "${githubUsername}"):`,
+          errorMessage(error)
+        );
+        ws.data.githubUsername = "";
+        sendError(
+          ws,
+          "Could not start interview. Please check your GitHub username and try again."
+        );
       }
 
       return;
@@ -131,18 +145,34 @@ export const interviewWebSocketHandler = {
     if (parsed.type === "message") {
       const userText = parsed.payload;
 
-      ws.data.history.push({ role: "user", content: userText });
-      saveMessage(ws.data.sessionId, "user", userText);
+      if (!ws.data.githubUsername) {
+        sendError(ws, "Interview has not started yet. Send your GitHub username first.");
+        return;
+      }
 
-      const aiReply = await askGroq(ws.data.history);
-      ws.data.history.push({ role: "assistant", content: aiReply });
-      saveMessage(ws.data.sessionId, "assistant", aiReply);
+      const historyLength = ws.data.history.length;
+      try {
+        ws.data.history.push({ role: "user", content: userText });
+        saveMessage(ws.data.sessionId, "user", userText);
 
-      ws.send(JSON.stringify({
-        type: "reply",
-        sessionId: ws.data.sessionId,
-        message: aiReply,
-      }));
+        const aiReply = await askGroq(ws.data.history);
+        ws.data.history.push({ role: "assistant", content: aiReply });
+        saveMessage(ws.data.sessionId, "assistant", aiReply);
+
+        ws.send(JSON.stringify({
+          type: "reply",
+          sessionId: ws.data.sessionId,
+          message: aiReply,
+        }));
+      } catch (error) {
+        console.error(
+          `Reply error (session ${ws.data.sessionId}):`,
+          errorMessage(error)
+        );
+        // Drop the unanswered turn so a retry does not duplicate it.
+        ws.data.history.length = historyLength;
+        sendError(ws, "The interviewer could not respond. Please repeat your answer.");
+      }
 
       return;
     }
@@ -153,6 +183,11 @@ export const interviewWebSocketHandler = {
           type: "evaluating",
           message: "Interview ended. Generating your report card...",
         }));
+
+        if (!ws.data.githubUsername) {
+          sendError(ws, "No interview in progress to evaluate.");
+          return;
+        }
 
         const report = await evaluateInterview(ws.data.history);
 
@@ -166,26 +201,29 @@ export const interviewWebSocketHandler = {
         }));
 
       } catch (error) {
-        console.error("Evaluation error:", error);
-        ws.send(JSON.stringify({
-          type: "error",
-          message: "Failed to generate report. Please try again.",
-        }));
+        console.error(
+          `Evaluation error (session ${ws.data.sessionId}):`,
+          errorMessage(error)
+        );
+        sendError(ws, "Failed to generate report. Please try again.");
       }
 
       return;
     }
 
-    ws.send(JSON.stringify({
-      type: "error",
-      message: `Unknown message type: ${parsed.type}`,
-    }));
+    sendError(ws, `Unknown message type: ${parsed.type}`);
   },
 
   close(ws: Bun.ServerWebSocket<SocketData>) {
     console.log(`Client disconnected — session: ${ws.data.sessionId}`);
-    if (ws.data.githubUsername) {
+    if (!ws.data.githubUsername) return;
+    try {
       endSession(ws.data.sessionId);
+    } catch (error) {
+      console.error(
+        `Failed to end session ${ws.data.sessionId} on disconnect:`,
+        errorMessage(error)
+      );
     }
   },
 };

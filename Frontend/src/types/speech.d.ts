@@ -5,12 +5,17 @@ interface SpeechRecognition extends EventTarget {
     start(): void;
     stop(): void;
     onresult: ((event: SpeechRecognitionEvent) => void) | null;
-    onerror: ((event: Event) => void) | null;
+    onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
     onend: (() => void) | null;
   }
   
   interface SpeechRecognitionEvent extends Event {
     results: SpeechRecognitionResultList;
+  }
+
+  interface SpeechRecognitionErrorEvent extends Event {
+    error: string;
+    message: string;
   }
   
   interface SpeechRecognitionResultList {

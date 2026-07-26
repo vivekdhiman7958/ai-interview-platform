@@ -67,6 +67,23 @@ export async function evaluateInterview(
       .replace(/```/g, "")
       .trim();
   
-    const report = JSON.parse(cleaned) as EvaluationReport;
+    let report: EvaluationReport;
+    try {
+      report = JSON.parse(cleaned) as EvaluationReport;
+    } catch (error) {
+      console.error(
+        "Evaluator returned non-JSON output:",
+        cleaned.slice(0, 500)
+      );
+      throw new Error(
+        `Evaluation response was not valid JSON: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    if (typeof report?.overallScore !== "number") {
+      console.error("Evaluator returned an unexpected shape:", cleaned.slice(0, 500));
+      throw new Error("Evaluation response is missing the expected report fields");
+    }
+
     return report;
   }

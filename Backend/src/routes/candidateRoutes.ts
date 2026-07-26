@@ -25,6 +25,7 @@ import {
     verifyToken,
     extractToken,
   } from "../services/authService";
+import { json, readJsonBody } from "../utils/http";
 
 export async function handleCandidateRoutes(req:Request): Promise<Response>{
     const url = new URL(req.url);
@@ -34,11 +35,13 @@ export async function handleCandidateRoutes(req:Request): Promise<Response>{
 
 // POST /api/candidate/registr
     if(path==="/api/candidate/register" && req.method==="POST"){
-        const body = await req.json() as {
+        const parsed = await readJsonBody<{
             name:string;
             email:string;
             password:string;
-        };
+        }>(req);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body;
 
         if(!body.name || !body.email || !body.password){
             return json({error:"name, email and the password are required"},400);
@@ -58,7 +61,9 @@ export async function handleCandidateRoutes(req:Request): Promise<Response>{
 
     //POST /api/candidate/login
     if(path==="/api/candidate/login" && method==="POST"){
-        const body = await req.json() as { email:string; password:string};
+        const parsed = await readJsonBody<{ email:string; password:string}>(req);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.body;
 
         if (!body.email || !body.password) {
             return json({ error: "email and password are required" }, 400);
@@ -93,7 +98,7 @@ export async function handleCandidateRoutes(req:Request): Promise<Response>{
         const inviteToken = inviteMatch[1];
 
         if(!inviteToken){
-            return json({error:""})
+            return json({error:"Invite token is required"},400)
         }
         const invite = getInviteByToken(inviteToken);
 
@@ -140,7 +145,7 @@ export async function handleCandidateRoutes(req:Request): Promise<Response>{
       if (sessionMatch && method === "GET") {
         const sessionId = sessionMatch[1];
         if(!sessionId){
-            return json({erorr:"Invalid sessionID"},403)
+            return json({error:"Invalid session ID"},400)
         }
         const session = getSessionById(sessionId);
 
@@ -155,11 +160,3 @@ export async function handleCandidateRoutes(req:Request): Promise<Response>{
 
         return json({ error: "Not found" }, 404);
         }
-
-        function json(data: unknown, status = 200): Response {
-      return new Response(JSON.stringify(data), {
-        status,
-        headers: { "Content-Type": "application/json" },
-    });
-    
-}
