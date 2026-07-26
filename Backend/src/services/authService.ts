@@ -2,8 +2,16 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_in_production";
+const MIN_SECRET_LENGTH = 32;
 const SALT_ROUNDS = 10;
+
+const rawSecret = process.env.JWT_SECRET;
+if (!rawSecret || rawSecret.length < MIN_SECRET_LENGTH) {
+  throw new Error(
+    `JWT_SECRET must be set to a random string of at least ${MIN_SECRET_LENGTH} characters`
+  );
+}
+const JWT_SECRET: string = rawSecret;
 
 export type TokenPayload={
     id:string;
@@ -25,7 +33,21 @@ export function generateToken(payload: TokenPayload): string {
 
 export function verifyToken(token: string): TokenPayload | null {
     try {
-      return jwt.verify(token, JWT_SECRET) as TokenPayload;
+      const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as
+        | jwt.JwtPayload
+        | string;
+      if (typeof decoded !== "object" || decoded === null) {
+        return null;
+      }
+      const { id, email, role } = decoded as Record<string, unknown>;
+      if (
+        typeof id !== "string" ||
+        typeof email !== "string" ||
+        (role !== "company" && role !== "candidate")
+      ) {
+        return null;
+      }
+      return { id, email, role };
     } catch {
       return null;
     }

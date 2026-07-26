@@ -12,6 +12,7 @@ import {
   getRolesById,
   getCompletedSessionByInviteAndCandidate,
 } from "../services/dbService";
+import { MAX_TRANSCRIPT_MESSAGE_LENGTH } from "../services/validationService";
 
 export type SocketData = {
   sessionId: string;
@@ -53,7 +54,26 @@ export const interviewWebSocketHandler = {
     message: string | Buffer
   ) {
     const raw = message.toString();
-    const parsed = JSON.parse(raw) as { type: string; payload: string };
+
+    let parsed: { type: string; payload: string };
+    try {
+      const candidate = JSON.parse(raw) as { type?: unknown; payload?: unknown };
+      if (
+        typeof candidate.type !== "string" ||
+        (candidate.payload !== undefined && typeof candidate.payload !== "string")
+      ) {
+        throw new Error("invalid message shape");
+      }
+      parsed = { type: candidate.type, payload: (candidate.payload as string) ?? "" };
+    } catch {
+      ws.send(JSON.stringify({ type: "error", message: "Invalid message format." }));
+      return;
+    }
+
+    if (parsed.payload.length > MAX_TRANSCRIPT_MESSAGE_LENGTH) {
+      ws.send(JSON.stringify({ type: "error", message: "Message too long." }));
+      return;
+    }
 
     if (parsed.type === "init") {
       const githubUsername = parsed.payload;
@@ -129,6 +149,14 @@ export const interviewWebSocketHandler = {
     }
 
     if (parsed.type === "message") {
+      if (ws.data.history.length === 0) {
+        ws.send(JSON.stringify({
+          type: "error",
+          message: "Interview not started. Send your GitHub username first.",
+        }));
+        return;
+      }
+
       const userText = parsed.payload;
 
       ws.data.history.push({ role: "user", content: userText });

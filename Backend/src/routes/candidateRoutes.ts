@@ -19,6 +19,14 @@ import {
     getMessagesBySession
 } from "../services/dbService";
 import {
+    isNonEmptyString,
+    isValidEmail,
+    isValidPassword,
+    normalizeEmail,
+    MAX_NAME_LENGTH,
+    MIN_PASSWORD_LENGTH,
+} from "../services/validationService";
+import {
     hashPassword,
     verifyPassword,
     generateToken,
@@ -40,20 +48,29 @@ export async function handleCandidateRoutes(req:Request): Promise<Response>{
             password:string;
         };
 
-        if(!body.name || !body.email || !body.password){
-            return json({error:"name, email and the password are required"},400);
+        if(!isNonEmptyString(body.name, MAX_NAME_LENGTH)){
+            return json({error:"name is required"},400);
+        }
+        if(!isValidEmail(body.email)){
+            return json({error:"A valid email is required"},400);
+        }
+        if(!isValidPassword(body.password)){
+            return json({error:`password must be at least ${MIN_PASSWORD_LENGTH} characters`},400);
         }
 
-        const existing = getCandidateByEmail(body.email);
+        const email = normalizeEmail(body.email);
+        const name = body.name.trim();
+
+        const existing = getCandidateByEmail(email);
         if(existing){
             return json({error:"Email already registered"},409)
         }
         const id=crypto.randomUUID();
         const hashed = await hashPassword(body.password);
-        createCandidate(id,body.name,body.email, hashed);
+        createCandidate(id, name, email, hashed);
 
-        const token = generateToken({ id, email: body.email, role: "candidate" });
-        return json({token,candidate:{ id, name: body.name, email: body.email }},201);
+        const token = generateToken({ id, email, role: "candidate" });
+        return json({token,candidate:{ id, name, email }},201);
     }
 
     //POST /api/candidate/login
@@ -64,7 +81,7 @@ export async function handleCandidateRoutes(req:Request): Promise<Response>{
             return json({ error: "email and password are required" }, 400);
           }
 
-        const candidate = getCandidateByEmail(body.email);
+        const candidate = getCandidateByEmail(normalizeEmail(body.email));
 
         if (!candidate) {
             return json({ error: "Invalid credentials" }, 401);

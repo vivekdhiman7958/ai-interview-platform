@@ -279,6 +279,18 @@ export function getSessionById(sessionId: string) {
   }
 
 
+export function getSessionOwnerCompanyId(sessionId: string): string | null {
+    const row = db.query(
+      `SELECT r.company_id as company_id
+       FROM sessions s
+       JOIN invites i   ON s.invite_id = i.id
+       JOIN job_roles r ON i.role_id   = r.id
+       WHERE s.id = ?`
+    ).get(sessionId) as { company_id: string } | null;
+    return row?.company_id ?? null;
+  }
+
+
 export function getMessagesBySession(sessionId: string) {
     return db.query(
       `SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC`

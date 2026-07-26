@@ -1,3 +1,5 @@
+import { isValidGithubUsername } from "./validationService";
+
 const GITHUB_API_BASE="https://api.github.com";
 
 type GithubUser={
@@ -27,14 +29,19 @@ export type GithubProfileSummary ={
 };
 
 export async function fetchGithubProfile(username:string):Promise<GithubProfileSummary>{
-    const userResponse = await fetch(`${GITHUB_API_BASE}/users/${username}`);
+    if(!isValidGithubUsername(username)){
+        throw new Error("Invalid GitHub username");
+    }
+
+    const encodedUsername = encodeURIComponent(username);
+    const userResponse = await fetch(`${GITHUB_API_BASE}/users/${encodedUsername}`);
     if(!userResponse.ok){
         throw new Error(`GitHub user fetch failed with status ${userResponse.status}`);
     } 
 
     const user = (await userResponse.json()) as GithubUser;
     const reposResponse = await fetch(
-        `${GITHUB_API_BASE}/users/${username}/repos?sort=updated&per_page=10`
+        `${GITHUB_API_BASE}/users/${encodedUsername}/repos?sort=updated&per_page=10`
     );
 
     if(!reposResponse.ok){ 

@@ -18,8 +18,19 @@ import {
     getSessionsByCandidate,
     getSessionsByRole,
     getSessionById,
-    getMessagesBySession
+    getMessagesBySession,
+    getSessionOwnerCompanyId
 } from "../services/dbService";
+import {
+    isNonEmptyString,
+    isValidEmail,
+    isValidPassword,
+    normalizeEmail,
+    sanitizeCustomQuestions,
+    MAX_NAME_LENGTH,
+    MAX_TEXT_LENGTH,
+    MIN_PASSWORD_LENGTH,
+} from "../services/validationService";
 import {
     hashPassword,
     verifyPassword,
@@ -42,11 +53,20 @@ export async function handleCompanyRoutes(req:Request):Promise<Response>{
             password:string;
         };
 
-        if(!body.name || !body.email || !body.password){
-            return json({ error: "name, email and password are required" }, 400);
+        if(!isNonEmptyString(body.name, MAX_NAME_LENGTH)){
+            return json({ error: "name is required" }, 400);
+        }
+        if(!isValidEmail(body.email)){
+            return json({ error: "A valid email is required" }, 400);
+        }
+        if(!isValidPassword(body.password)){
+            return json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters` }, 400);
         }
 
-        const existing = getCompanyByEmail(body.email);
+        const email = normalizeEmail(body.email);
+        const name = body.name.trim();
+
+        const existing = getCompanyByEmail(email);
         if (existing) {
             return json({ error: "Email already registered" }, 409);
           }
@@ -54,11 +74,11 @@ export async function handleCompanyRoutes(req:Request):Promise<Response>{
         const id = crypto.randomUUID();
 
         const hashed = await hashPassword(body.password);
-        createCompany(id,body.name, body.email, hashed);
+        createCompany(id, name, email, hashed);
 
-        const token = generateToken({ id, email: body.email, role: "company" });
+        const token = generateToken({ id, email, role: "company" });
         
-        return json({ token, company: { id, name: body.name, email: body.email } }, 201);
+        return json({ token, company: { id, name, email } }, 201);
     }
 
 
@@ -70,7 +90,7 @@ export async function handleCompanyRoutes(req:Request):Promise<Response>{
             return json({ error: "email and password are required" }, 400);
           }
         
-        const company = getCompanyByEmail(body.email);
+        const company = getCompanyByEmail(normalizeEmail(body.email));
           if (!company) {
             return json({ error: "Invalid credentials" }, 401);
           }
@@ -108,20 +128,29 @@ export async function handleCompanyRoutes(req:Request):Promise<Response>{
       custom_questions: string[];
     };
 
-    if (!body.title || !body.tech_stack || !body.difficulty) {
+    if (
+      !isNonEmptyString(body.title, MAX_NAME_LENGTH) ||
+      !isNonEmptyString(body.tech_stack, MAX_TEXT_LENGTH) ||
+      !isNonEmptyString(body.difficulty, MAX_NAME_LENGTH)
+    ) {
       return json({ error: "title, tech_stack and difficulty are required" }, 400);
     }
+    if (body.description !== undefined && typeof body.description !== "string") {
+      return json({ error: "description must be a string" }, 400);
+    }
+
+    const numQuestions = clampQuestionCount(body.num_questions);
 
     const id = crypto.randomUUID();
     createJobRole(
       id,
       companyId,
-      body.title,
-      body.description || "",
-      body.tech_stack,
-      body.difficulty,
-      body.num_questions || 5,
-      JSON.stringify(body.custom_questions || [])
+      body.title.trim(),
+      (body.description || "").slice(0, MAX_TEXT_LENGTH),
+      body.tech_stack.trim(),
+      body.difficulty.trim(),
+      numQuestions,
+      JSON.stringify(sanitizeCustomQuestions(body.custom_questions))
     );
 
     return json({ id, message: "Job role created" }, 201);
@@ -154,7 +183,8 @@ export async function handleCompanyRoutes(req:Request):Promise<Response>{
         const token = crypto.randomUUID();
         createInvite(inviteId, roleId, token);
 
-        const inviteLink = `http://localhost:5173/interview/${token}`;
+        const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
+        const inviteLink = `${frontendUrl}/interview/${token}`;
         return json({ inviteLink, token }, 201);
     }
 
@@ -181,14 +211,33 @@ if (updateRoleMatch && method === "PUT") {
     custom_questions?: string[];
   };
 
+  if (body.title !== undefined && !isNonEmptyString(body.title, MAX_NAME_LENGTH)) {
+    return json({ error: "title must be a non-empty string" }, 400);
+  }
+  if (body.tech_stack !== undefined && !isNonEmptyString(body.tech_stack, MAX_TEXT_LENGTH)) {
+    return json({ error: "tech_stack must be a non-empty string" }, 400);
+  }
+  if (body.difficulty !== undefined && !isNonEmptyString(body.difficulty, MAX_NAME_LENGTH)) {
+    return json({ error: "difficulty must be a non-empty string" }, 400);
+  }
+  if (body.description !== undefined && typeof body.description !== "string") {
+    return json({ error: "description must be a string" }, 400);
+  }
+
   updateJobRole(
     roleId,
-    body.title ?? role.title,
-    body.description ?? role.description,
-    body.tech_stack ?? role.tech_stack,
-    body.difficulty ?? role.difficulty,
-    body.num_questions ?? role.num_questions,
-    JSON.stringify(body.custom_questions ?? JSON.parse(role.custom_questions || "[]"))
+    body.title?.trim() ?? role.title,
+    (body.description ?? role.description ?? "").slice(0, MAX_TEXT_LENGTH),
+    body.tech_stack?.trim() ?? role.tech_stack,
+    body.difficulty?.trim() ?? role.difficulty,
+    body.num_questions === undefined
+      ? role.num_questions
+      : clampQuestionCount(body.num_questions),
+    JSON.stringify(
+      body.custom_questions === undefined
+        ? sanitizeCustomQuestions(safeParseQuestions(role.custom_questions))
+        : sanitizeCustomQuestions(body.custom_questions)
+    )
   );
 
   return json({ message: "Role updated" });
@@ -251,6 +300,9 @@ if (getRoleMatch && method === "GET") {
             const session = getSessionById(sessionId);
 
             if (!session) return json({ error: "Session not found" }, 404);
+            if (getSessionOwnerCompanyId(sessionId) !== companyId) {
+                return json({ error: "Forbidden" }, 403);
+            }
 
             const messages = getMessagesBySession(sessionId);
             return json({ session, messages });
@@ -265,4 +317,19 @@ if (getRoleMatch && method === "GET") {
           headers: { "Content-Type": "application/json" },
     });
 
+}
+
+function clampQuestionCount(value: unknown): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 5;
+    return Math.min(20, Math.max(1, Math.floor(parsed)));
+}
+
+function safeParseQuestions(raw: string | null): string[] {
+    if (!raw) return [];
+    try {
+        return JSON.parse(raw) as string[];
+    } catch {
+        return [];
+    }
 }
