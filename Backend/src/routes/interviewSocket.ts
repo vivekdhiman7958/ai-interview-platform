@@ -37,26 +37,27 @@ export function buildUpgradeData(
   };
 }
 
-function sendError(ws: Bun.ServerWebSocket<SocketData>, message: string) {
-  ws.send(JSON.stringify({ type: "error", message }));
+type Socket = Bun.ServerWebSocket<SocketData>;
+
+function send(ws: Socket, payload: Record<string, unknown>) {
+  ws.send(JSON.stringify(payload));
+}
+
+function sendError(ws: Socket, message: string) {
+  send(ws, { type: "error", message });
 }
 
 export const interviewWebSocketHandler = {
-  async open(ws: Bun.ServerWebSocket<SocketData>) {
+  async open(ws: Socket) {
     console.log(`Client connected — session: ${ws.data.sessionId}`);
-    ws.send(
-      JSON.stringify({
-        type: "connected",
-        sessionId: ws.data.sessionId,
-        message: "Please send your GitHub username to start the interview.",
-      })
-    );
+    send(ws, {
+      type: "connected",
+      sessionId: ws.data.sessionId,
+      message: "Please send your GitHub username to start the interview.",
+    });
   },
 
-  async message(
-    ws: Bun.ServerWebSocket<SocketData>,
-    message: string | Buffer
-  ) {
+  async message(ws: Socket, message: string | Buffer) {
     const raw = message.toString();
 
     let parsed: { type: string; payload: string };
@@ -99,11 +100,11 @@ export const interviewWebSocketHandler = {
         );
     
         if (existing) {
-          ws.send(JSON.stringify({
+          send(ws, {
             type: "already-completed",
             sessionId: existing.id,
             message: "You have already completed this interview.",
-          }));
+          });
           return;
         }
 
@@ -121,11 +122,11 @@ export const interviewWebSocketHandler = {
         ws.data.history.push({ role: "assistant", content: firstQuestion });
         saveMessage(ws.data.sessionId, "assistant", firstQuestion);
 
-        ws.send(JSON.stringify({
+        send(ws, {
           type: "reply",
           sessionId: ws.data.sessionId,
           message: firstQuestion,
-        }));
+        });
 
       } catch (error) {
         console.error(
@@ -159,11 +160,11 @@ export const interviewWebSocketHandler = {
         ws.data.history.push({ role: "assistant", content: aiReply });
         saveMessage(ws.data.sessionId, "assistant", aiReply);
 
-        ws.send(JSON.stringify({
+        send(ws, {
           type: "reply",
           sessionId: ws.data.sessionId,
           message: aiReply,
-        }));
+        });
       } catch (error) {
         console.error(
           `Reply error (session ${ws.data.sessionId}):`,
@@ -179,10 +180,10 @@ export const interviewWebSocketHandler = {
 
     if (parsed.type === "end") {
       try {
-        ws.send(JSON.stringify({
+        send(ws, {
           type: "evaluating",
           message: "Interview ended. Generating your report card...",
-        }));
+        });
 
         if (!ws.data.githubUsername) {
           sendError(ws, "No interview in progress to evaluate.");
@@ -194,11 +195,11 @@ export const interviewWebSocketHandler = {
         endSession(ws.data.sessionId);
         saveReport(ws.data.sessionId, JSON.stringify(report));
 
-        ws.send(JSON.stringify({
+        send(ws, {
           type: "report",
           sessionId: ws.data.sessionId,
-          report: report,
-        }));
+          report,
+        });
 
       } catch (error) {
         console.error(
@@ -214,7 +215,7 @@ export const interviewWebSocketHandler = {
     sendError(ws, `Unknown message type: ${parsed.type}`);
   },
 
-  close(ws: Bun.ServerWebSocket<SocketData>) {
+  close(ws: Socket) {
     console.log(`Client disconnected — session: ${ws.data.sessionId}`);
     if (!ws.data.githubUsername) return;
     try {

@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/authContext";
-import api, { getErrorMessage } from "../../services/api";
+import api from "../../services/api";
+import UserHeader from "../../components/ui/UserHeader";
+import InlineLoader from "../../components/ui/InlineLoader";
+import EmptyState from "../../components/ui/EmptyState";
+import DifficultyBadge from "../../components/ui/DifficultyBadge";
+import AlertBanner from "../../components/ui/AlertBanner";
+import { getApiErrorMessage } from "../../utils/errors";
 
 type Role = {
   id: string;
@@ -26,7 +32,7 @@ export default function CompanyDashboard() {
       .then((res) => setRoles(res.data.roles ?? []))
       .catch((err) => {
         console.error("Failed to load roles", err);
-        setError(getErrorMessage(err, "Failed to load your roles"));
+        setError(getApiErrorMessage(err, "Failed to load your roles"));
       })
       .finally(() => setLoading(false));
   }, []);
@@ -39,7 +45,7 @@ export default function CompanyDashboard() {
       setInviteRole(roleId);
     } catch (err: unknown) {
       console.error("Failed to generate invite link", err);
-      setError(getErrorMessage(err, "Failed to generate invite link"));
+      setError(getApiErrorMessage(err, "Failed to generate invite link"));
     }
   }
 
@@ -51,7 +57,7 @@ export default function CompanyDashboard() {
       setRoles((prev) => prev.filter((r) => r.id !== roleId));
     } catch (err: unknown) {
       console.error("Failed to delete role", roleId, err);
-      setError(getErrorMessage(err, "Failed to delete role"));
+      setError(getApiErrorMessage(err, "Failed to delete role"));
     }
   }
 
@@ -69,36 +75,10 @@ export default function CompanyDashboard() {
     navigate("/");
   }
 
-  const difficultyColor: Record<string, string> = {
-    easy: "bg-green-100 text-green-700",
-    medium: "bg-yellow-100 text-yellow-700",
-    hard: "bg-red-100 text-red-700",
-  };
-
   return (
     <div className="min-h-screen bg-[#F8FAFC]" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
 
-      {/* Navbar */}
-      <header className="bg-white border-b border-[#E2E8F0] px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-[#0052FF] rounded-lg flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="6" y1="4" x2="6" y2="20" /><line x1="10" y1="8" x2="10" y2="16" />
-              <line x1="14" y1="5" x2="14" y2="19" /><line x1="18" y1="9" x2="18" y2="15" />
-            </svg>
-          </div>
-          <span className="font-bold text-[#0D1B2A]">InterviewAI</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-[#64748B]">{user?.name}</span>
-          <button
-            onClick={handleLogout}
-            className="text-sm text-[#64748B] hover:text-[#0D1B2A] transition"
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
+      <UserHeader name={user?.name} onSignOut={handleLogout} />
 
       <div className="max-w-5xl mx-auto px-6 py-10">
 
@@ -124,16 +104,11 @@ export default function CompanyDashboard() {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-center justify-between gap-4">
-            <p className="text-sm text-red-600">{error}</p>
-            <button
-              type="button"
-              onClick={() => setError("")}
-              className="text-xs text-red-500 px-3 py-1.5 rounded-lg border border-red-200 shrink-0"
-            >
-              Dismiss
-            </button>
-          </div>
+          <AlertBanner
+            message={error}
+            onDismiss={() => setError("")}
+            className="mb-6"
+          />
         )}
 
         {/* Invite link popup */}
@@ -162,28 +137,26 @@ export default function CompanyDashboard() {
 
         {/* Roles */}
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-6 h-6 border-2 border-[#0052FF] border-t-transparent rounded-full animate-spin" />
-          </div>
+          <InlineLoader />
         ) : roles.length === 0 ? (
-          <div className="bg-white border border-[#E2E8F0] rounded-xl p-16 text-center">
-            <div className="w-12 h-12 bg-[#EBF1FF] rounded-xl flex items-center justify-center mx-auto mb-4">
+          <EmptyState
+            icon={
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0052FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
               </svg>
-            </div>
-            <h3 className="font-semibold text-[#0D1B2A] mb-2">No roles yet</h3>
-            <p className="text-sm text-[#64748B] mb-6">
-              Create your first interview role to start hiring
-            </p>
-            <button
-              onClick={() => navigate("/company/roles/create")}
-              className="bg-[#0052FF] text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-[#0046DD] transition"
-            >
-              Create your first role
-            </button>
-          </div>
+            }
+            title="No roles yet"
+            description="Create your first interview role to start hiring"
+            action={
+              <button
+                onClick={() => navigate("/company/roles/create")}
+                className="bg-[#0052FF] text-white text-sm font-semibold px-5 py-2.5 rounded-lg hover:bg-[#0046DD] transition"
+              >
+                Create your first role
+              </button>
+            }
+          />
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {roles.map((role) => (
@@ -196,9 +169,7 @@ export default function CompanyDashboard() {
                     <h3 className="font-semibold text-[#0D1B2A] text-base">
                       {role.title}
                     </h3>
-                    <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full capitalize ${difficultyColor[role.difficulty] ?? "bg-gray-100 text-gray-600"}`}>
-                      {role.difficulty}
-                    </span>
+                    <DifficultyBadge difficulty={role.difficulty} />
                   </div>
                   <p className="text-sm text-[#64748B] truncate mb-2">
                     {role.tech_stack}

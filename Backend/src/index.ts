@@ -1,5 +1,5 @@
 import { initDB } from "./services/dbService";
-import { verifyToken, extractToken } from "./services/authService";
+import { verifyToken } from "./services/authService";
 import { getInviteByToken } from "./services/dbService";
 import {
   interviewWebSocketHandler,
@@ -8,7 +8,7 @@ import {
 } from "./routes/interviewSocket";
 import { handleCompanyRoutes } from "./routes/companyRoutes";
 import { handleCandidateRoutes } from "./routes/candidateRoutes";
-import { errorMessage } from "./utils/http";
+import { corsHeaders, errorMessage, json, withCors } from "./utils/http";
 
 initDB();
 
@@ -18,44 +18,27 @@ const server = Bun.serve<SocketData>({
   async fetch(req, server) {
     const url = new URL(req.url);
 
-    // ── CORS headers (needed later for React frontend)
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "http://localhost:5173",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Credentials": "true",
-    };
-
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // ── WebSocket upgrade 
+    // ── WebSocket upgrade
     if (url.pathname === "/interview") {
       const inviteToken = url.searchParams.get("token");
       const authToken = url.searchParams.get("authToken");
 
       if (!inviteToken || !authToken) {
-        return new Response(
-          JSON.stringify({ error: "token and authToken are required" }),
-          { status: 400, headers: corsHeaders }
-        );
+        return withCors(json({ error: "token and authToken are required" }, 400));
       }
 
       const payload = verifyToken(authToken);
       if (!payload || payload.role !== "candidate") {
-        return new Response(
-          JSON.stringify({ error: "Unauthorized" }),
-          { status: 401, headers: corsHeaders }
-        );
+        return withCors(json({ error: "Unauthorized" }, 401));
       }
 
       const invite = getInviteByToken(inviteToken);
       if (!invite) {
-        return new Response(
-          JSON.stringify({ error: "Invalid invite token" }),
-          { status: 404, headers: corsHeaders }
-        );
+        return withCors(json({ error: "Invalid invite token" }, 404));
       }
 
       const upgraded = server.upgrade(req, {
@@ -65,13 +48,10 @@ const server = Bun.serve<SocketData>({
 
       if (upgraded) return undefined;
 
-      return new Response(
-        JSON.stringify({ error: "WebSocket upgrade failed" }),
-        { status: 400, headers: corsHeaders }
-      );
+      return withCors(json({ error: "WebSocket upgrade failed" }, 400));
     }
 
-    // ── HTTP routes 
+    // ── HTTP routes
     let response: Response;
 
     try {
@@ -87,29 +67,17 @@ const server = Bun.serve<SocketData>({
       ) {
         response = await handleCandidateRoutes(req);
       } else {
-        response = new Response(
-          JSON.stringify({ message: "Voice Agent Interviewer API" }),
-          { headers: { "Content-Type": "application/json" } }
-        );
+        response = json({ message: "Voice Agent Interviewer API" });
       }
     } catch (error) {
       console.error(
         `Unhandled error while handling ${req.method} ${url.pathname}:`,
         errorMessage(error)
       );
-      response = new Response(
-        JSON.stringify({ error: "Internal server error" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+      response = json({ error: "Internal server error" }, 500);
     }
 
-    // ── Attach CORS headers to every response 
-    const newHeaders = new Headers(response.headers);
-    Object.entries(corsHeaders).forEach(([k, v]) => newHeaders.set(k, v));
-    return new Response(response.body, {
-      status: response.status,
-      headers: newHeaders,
-    });
+    return withCors(response);
   },
 
   websocket: interviewWebSocketHandler,
