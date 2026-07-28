@@ -387,6 +387,6 @@ Companies can evaluate more candidates in less time, while candidates receive a 
 
 ---
 
-# License
 
-MIT License
+
+
